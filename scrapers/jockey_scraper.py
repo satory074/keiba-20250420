@@ -111,7 +111,60 @@ def scrape_jockey_profile(jockey_id):
                 else:
                     logger.warning(f"Could not find tbody in {table_key} table for jockey {jockey_id}")
 
-            # Add more parsing logic for other table types (track condition, distance, etc.) based on headers
+            # --- Add parsing for other specific table types ---
+
+            # Track Condition Summary (C1.5) - Header guess: "馬場状態"
+            elif headers and "馬場状態" in headers and "勝率" in headers:
+                logger.debug(f"Parsing track condition summary table: {headers}")
+                table_key = "summary_track_condition"
+                jockey_data["stats"][table_key] = []
+                body = table.find("tbody")
+                if body and isinstance(body, Tag):
+                    rows = body.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if len(cells) >= len(headers):
+                            item_data = {headers[i]: clean_text(cells[i].text) for i in range(len(headers))}
+                            jockey_data["stats"][table_key].append(item_data)
+                            logger.debug(f"  Added {table_key} data: {item_data}")
+                else:
+                    logger.warning(f"Could not find tbody in {table_key} table for jockey {jockey_id}")
+
+            # Pace/Leg Type Summary (C1.6) - Header guess: "脚質"
+            elif headers and "脚質" in headers and "勝率" in headers:
+                logger.debug(f"Parsing pace/leg type summary table: {headers}")
+                table_key = "summary_leg_type"
+                jockey_data["stats"][table_key] = []
+                body = table.find("tbody")
+                if body and isinstance(body, Tag):
+                    rows = body.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if len(cells) >= len(headers):
+                            item_data = {headers[i]: clean_text(cells[i].text) for i in range(len(headers))}
+                            jockey_data["stats"][table_key].append(item_data)
+                            logger.debug(f"  Added {table_key} data: {item_data}")
+                else:
+                    logger.warning(f"Could not find tbody in {table_key} table for jockey {jockey_id}")
+
+            # Popularity Summary (C1.7) - Header guess: "人気"
+            elif headers and "人気" in headers and "勝率" in headers:
+                logger.debug(f"Parsing popularity summary table: {headers}")
+                table_key = "summary_popularity"
+                jockey_data["stats"][table_key] = []
+                body = table.find("tbody")
+                if body and isinstance(body, Tag):
+                    rows = body.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if len(cells) >= len(headers):
+                            item_data = {headers[i]: clean_text(cells[i].text) for i in range(len(headers))}
+                            jockey_data["stats"][table_key].append(item_data)
+                            logger.debug(f"  Added {table_key} data: {item_data}")
+                else:
+                    logger.warning(f"Could not find tbody in {table_key} table for jockey {jockey_id}")
+
+            # Add more parsing logic for other table types if needed (e.g., distance)
 
     except Exception as e:
         logger.error(f"Error scraping jockey profile for {jockey_id}: {e}", exc_info=True)

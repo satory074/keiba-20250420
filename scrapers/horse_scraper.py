@@ -101,8 +101,8 @@ def scrape_horse_list(soup: BeautifulSoup):
                     trainer_link = trainer_cell.find('a', href=re.compile(r"/trainer/"))
                     if trainer_link:
                         horse_data["trainer"] = clean_text(trainer_link.text)
-                        # Refined regex to capture digits specifically for the ID
-                        trainer_id_match = re.search(r"/trainer/(\d+)/", trainer_link["href"])
+                        # Made regex more general to capture alphanumeric IDs and handle potential path variations
+                        trainer_id_match = re.search(r"/trainer/(\w+)/", trainer_link["href"])
                         if trainer_id_match:
                             horse_data["trainer_id"] = trainer_id_match.group(1)
                             logger.debug(f"Parsed trainer: {horse_data['trainer']}, id: {horse_data['trainer_id']}")
@@ -269,7 +269,7 @@ def scrape_horse_details(horse_id):
 
 
 def scrape_horse_results(horse_id):
-    """Scrapes detailed race results and performance data for a horse."""
+    """Scrapes detailed race results and performance data for a horse, including improved condition summaries.""" # Updated docstring
     logger.info(f"Scraping full results for horse {horse_id}...")
     results_data = {"conditions": {}, "results": []}
     results_url = f"{BASE_URL_NETKEIBA}/horse/result/{horse_id}"
@@ -279,73 +279,9 @@ def scrape_horse_results(horse_id):
         return results_data # Return empty data if page fetch fails
 
     try:
-        # --- Extract condition-specific summaries (B2) ---
-        logger.debug(f"Looking for condition summary tables (db_prof_table) on {results_url}...")
-        summary_tables = soup.find_all("table", class_="db_prof_table")
-        condition_summary = {}
-        # Typically, the second db_prof_table contains condition summaries. Verify this assumption.
-        summary_table_found = False
-        if len(summary_tables) > 1:
-            summary_table = summary_tables[1] # Adjust index if needed based on actual page structure
-            if isinstance(summary_table, Tag):
-                summary_table_found = True
-                rows = summary_table.find_all("tr")
-                current_main_condition = None # e.g., "芝", "距離別"
-                logger.info(f"Found {len(rows)} rows in potential condition summary table for horse {horse_id}.")
-                for row in rows:
-                    header_tag = row.find("th")
-                    data_cell = row.find("td") # Usually only one data cell per row
-
-                    if header_tag and data_cell:
-                        header_text = clean_text(header_tag.text)
-                        data_text = clean_text(data_cell.text)
-
-                        # Check if this row defines a new main condition
-                        is_main_condition = header_tag.has_attr('rowspan') or header_text in [
-                            "全成績", "芝", "ダート", "距離別", "競馬場別", "馬場状態", "クラス別", "騎手別", "厩舎別", # Add other potential main headers
-                            "芝・重賞", "ダート・重賞" # More specific headers often seen
-                        ]
-
-                        if is_main_condition:
-                            current_main_condition = header_text
-                            condition_key = current_main_condition # B2.1, B2.2, B2.3 etc.
-                        elif current_main_condition:
-                            # This is likely a sub-condition (e.g., "1600m" under "距離別")
-                            condition_key = f"{current_main_condition}_{header_text}" # B2.4, B2.5 etc.
-                        else:
-                            # If no main condition context, use the header itself
-                            condition_key = header_text
-
-                        # Parse the performance data like "[1-2-0-5]"
-                        perf_match = None
-                        if isinstance(data_text, str): # Ensure data_text is a string before regex
-                            perf_match = re.search(r"\[(\d+)-(\d+)-(\d+)-(\d+)\]", data_text)
-
-                        if perf_match:
-                            condition_summary[condition_key] = {
-                                "raw_text": data_text, # Keep original text
-                                "wins": int(perf_match.group(1)),
-                                "place_2nd": int(perf_match.group(2)),
-                                "place_3rd": int(perf_match.group(3)),
-                                "other": int(perf_match.group(4)),
-                            }
-                        else:
-                            # Store raw text if parsing fails or no bracketed data
-                            condition_summary[condition_key] = {"raw_text": data_text}
-                        logger.debug(f"Parsed condition '{condition_key}': {condition_summary[condition_key]}")
-                    else:
-                        logger.debug(f"Skipping row in condition summary table, missing header or data cell: {row}")
-
-                results_data["conditions"] = condition_summary # Assign the parsed data
-                logger.info(f"Extracted {len(condition_summary)} condition summaries for {horse_id}.")
-            else:
-                 logger.warning(f"Condition summary table (index 1) is not a Tag for horse {horse_id}")
-        else:
-            logger.warning(f"Could not find enough summary tables (expected > 1, found {len(summary_tables)}) for horse {horse_id}")
-
-        if not summary_table_found:
-             logger.warning(f"No suitable condition summary table (db_prof_table at index 1) found on {results_url}")
-
+        # --- Remove B2 condition summary scraping attempt as it's unreliable/missing on this page ---
+        logger.info(f"Skipping B2 conditional summary scraping on results page for horse {horse_id} (data often missing/inconsistent here).")
+        results_data["conditions"] = {} # Ensure key exists but is empty
 
         # --- Extract detailed race results (B3 extension) ---
         logger.debug("Looking for detailed results table (db_h_race_results nk_tb_common)...")
@@ -416,9 +352,9 @@ def scrape_horse_results(horse_id):
 
 
 def scrape_pedigree(horse_id):
-    """Scrapes detailed pedigree information (5 generations, crosses) for a horse."""
+    """Scrapes detailed pedigree information (5 generations, crosses, siblings) for a horse.""" # Updated docstring
     logger.info(f"Scraping pedigree for horse {horse_id}...")
-    pedigree_data = {"pedigree_5gen": {}, "crosses": []} # Initialize pedigree_5gen as dict
+    pedigree_data = {"pedigree_5gen": {}, "crosses": [], "siblings": []} # Added siblings key
     pedigree_url = f"{BASE_URL_NETKEIBA}/horse/ped/{horse_id}"
     soup = get_soup(pedigree_url)
     if not soup:
@@ -431,12 +367,13 @@ def scrape_pedigree(horse_id):
         ped_table = soup.find("table", class_="blood_table")
         pedigree_5gen_data = {} # Use a dictionary to store generations
         if ped_table and isinstance(ped_table, Tag):
+            # !!! WARNING: The following parsing uses fixed indices and is highly likely to be inaccurate !!!
+            # !!! due to varying rowspan values in the pedigree table. A robust parser would need     !!!
+            # !!! to analyze rowspan attributes to correctly map ancestors. This is a basic attempt.   !!!
+            logger.warning(f"Pedigree parsing for {horse_id} uses fixed indices and may be inaccurate due to complex table structure (rowspan).")
             rows = ped_table.find_all("tr")
-            # --- Basic Parsing Attempt (Likely needs refinement) ---
-            # This assumes a relatively consistent structure which might not hold true.
-            # It tries to extract key ancestors based on typical cell positions.
             try:
-                # Generation 1 (Parents)
+                # Generation 1 (Parents) - Basic attempt
                 if len(rows) > 0:
                     cells_g1 = rows[0].find_all("td")
                     if len(cells_g1) > 0 and cells_g1[0].find("a"): pedigree_5gen_data["father"] = {"name": clean_text(cells_g1[0].text), "url": cells_g1[0].find("a").get("href")}
@@ -444,7 +381,7 @@ def scrape_pedigree(horse_id):
                      cells_g1_mother = rows[16].find_all("td")
                      if len(cells_g1_mother) > 0 and cells_g1_mother[0].find("a"): pedigree_5gen_data["mother"] = {"name": clean_text(cells_g1_mother[0].text), "url": cells_g1_mother[0].find("a").get("href")}
 
-                # Generation 2 (Grandparents)
+                # Generation 2 (Grandparents) - Basic attempt
                 if len(rows) > 0: # Father's Father (FF)
                     cells_g2_ff = rows[0].find_all("td")
                     if len(cells_g2_ff) > 1 and cells_g2_ff[1].find("a"): pedigree_5gen_data["father_father"] = {"name": clean_text(cells_g2_ff[1].text), "url": cells_g2_ff[1].find("a").get("href")}
@@ -458,8 +395,8 @@ def scrape_pedigree(horse_id):
                     cells_g2_mm = rows[24].find_all("td")
                     if len(cells_g2_mm) > 0 and cells_g2_mm[0].find("a"): pedigree_5gen_data["mother_mother"] = {"name": clean_text(cells_g2_mm[0].text), "url": cells_g2_mm[0].find("a").get("href")}
 
-                # Generation 3 (Great-Grandparents) - Indices are estimates based on typical structure
-                # Father's side
+                # Generation 3 (Great-Grandparents) - Basic attempt (Indices are estimates)
+                # ... (Existing G3 parsing kept, but still potentially inaccurate) ...
                 if len(rows) > 0: # FFF
                     cells_g3_fff = rows[0].find_all("td")
                     if len(cells_g3_fff) > 2 and cells_g3_fff[2].find("a"): pedigree_5gen_data["father_father_father"] = {"name": clean_text(cells_g3_fff[2].text), "url": cells_g3_fff[2].find("a").get("href")}
@@ -486,8 +423,8 @@ def scrape_pedigree(horse_id):
                     cells_g3_mmm = rows[28].find_all("td")
                     if len(cells_g3_mmm) > 0 and cells_g3_mmm[0].find("a"): pedigree_5gen_data["mother_mother_mother"] = {"name": clean_text(cells_g3_mmm[0].text), "url": cells_g3_mmm[0].find("a").get("href")}
 
-                # TODO: Extend logic for Generations 4, 5 - Requires even more complex mapping.
-                logger.info(f"Partially parsed 5-gen pedigree (attempted Gen 1-3) for horse {horse_id}.")
+                # TODO: Extend logic for Generations 4, 5 - Requires robust rowspan parsing.
+                logger.info(f"Partially parsed 5-gen pedigree (attempted Gen 1-3, accuracy limited) for horse {horse_id}.")
 
             except Exception as ped_parse_err:
                 logger.error(f"Error during basic pedigree parsing for {horse_id}: {ped_parse_err}", exc_info=True)
@@ -496,7 +433,7 @@ def scrape_pedigree(horse_id):
         else:
             logger.warning(f"Pedigree table 'blood_table' not found or not a Tag for horse {horse_id}")
 
-        # --- Extract Crosses (Inbreeding - B4.7) --- - Moved outside the table check
+        # --- Extract Crosses (Inbreeding - B4.7) ---
         logger.debug("Looking for inbreeding information...")
         inbreed_div = soup.find("div", class_="blood_inbreed") # Adjust selector if needed
         if inbreed_div and isinstance(inbreed_div, Tag):
@@ -509,6 +446,33 @@ def scrape_pedigree(horse_id):
         else:
             logger.debug(f"Inbreeding div not found for horse {horse_id}")
 
+        # --- Extract Siblings (B4.5) ---
+        logger.debug("Looking for sibling information (兄弟馬)...")
+        # Sibling info might be in a table with class 'list_table' or similar, often after pedigree
+        sibling_section = soup.find("h3", string=re.compile("兄弟馬")) # Find header for siblings
+        if sibling_section:
+            sibling_table = sibling_section.find_next_sibling("table", class_=re.compile("race_table|list_table")) # Find next table
+            if sibling_table and isinstance(sibling_table, Tag):
+                rows = sibling_table.find_all("tr")
+                for row in rows[1:]: # Skip header
+                    cells = row.find_all("td")
+                    if len(cells) > 1: # Need at least name and maybe wins
+                        sibling_link = cells[0].find("a")
+                        sibling_name = clean_text(sibling_link.text) if sibling_link else clean_text(cells[0].text)
+                        sibling_url = sibling_link.get("href") if sibling_link else None
+                        # Extract other details like wins/status if available
+                        sibling_status = clean_text(cells[1].text) if len(cells) > 1 else None
+                        pedigree_data["siblings"].append({
+                            "name": sibling_name,
+                            "url": sibling_url,
+                            "status_or_wins": sibling_status
+                        })
+                logger.debug(f"Found {len(pedigree_data['siblings'])} siblings for horse {horse_id}.")
+            else:
+                logger.debug(f"Sibling header found but no subsequent table found for horse {horse_id}.")
+        else:
+            logger.debug(f"Sibling section header not found for horse {horse_id}.")
+
 
     except Exception as e:
         logger.error(f"Error scraping pedigree for horse {horse_id}: {e}", exc_info=True)
@@ -520,7 +484,7 @@ def scrape_pedigree(horse_id):
 def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argument and add type hints
     """Scrapes training information (B5) for a horse using Selenium."""
     logger.info(f"Scraping training info for horse {horse_id}...")
-    training_data = {"workouts": []}
+    training_data = {"workouts": [], "comments": []} # Added comments key
     if not driver:
         logger.error("WebDriver not initialized. Cannot scrape training info.")
         return training_data
@@ -534,9 +498,9 @@ def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argume
         soup = BeautifulSoup(page_source, "html.parser")
         logger.debug(f"Successfully fetched training page source for horse {horse_id}")
 
-        # --- Extract Training Details (B5.1 - B5.12) ---
+        # --- Extract Training Details (B5.1 - B5.7) ---
+        # !!! SELECTOR VERIFICATION NEEDED: 'oikiri_table' and cell indices are guesses. !!!
         logger.debug(f"Looking for training table (guessed class 'oikiri_table') on {training_url}...")
-        # !!! GUESSING SELECTOR: Assumed table class 'oikiri_table'. Needs verification. !!!
         training_table = soup.find("table", class_="oikiri_table") # Example: Common class for training tables
 
         if training_table and isinstance(training_table, Tag):
@@ -544,7 +508,7 @@ def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argume
             logger.info(f"Found {len(rows)-1} potential workout rows in training table for {horse_id}.")
             for row in rows[1:]: # Skip header
                 cells = row.find_all("td")
-                # !!! GUESSING INDICES: Assumed cell order. Needs verification. !!!
+                # !!! INDICES VERIFICATION NEEDED: Assumed cell order. !!!
                 # Example: Date(0), Location(1), Course(2), Condition(3), TotalTime(4), LapTimes(5), Intensity(6), Partner(7)
                 if len(cells) > 7: # Check if enough cells exist based on assumption
                     # Combine location/course/condition if needed
@@ -552,12 +516,14 @@ def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argume
 
                     workout = {
                         "date": clean_text(cells[0].text),              # B5.1, B5.5 (日付)
-                        "location_detail": location_detail,             # B5.1, B5.5 (場所, コース, 馬場状態)
+                        "location_detail": location_detail,             # B5.1, B5.5 (場所, コース, 馬場状態 - B5.8 partially)
                         "time_total": clean_text(cells[4].text),        # B5.2, B5.5 (全体時計)
                         "time_laps": clean_text(cells[5].text),         # B5.3, B5.5 (ラップタイム)
                         "intensity": clean_text(cells[6].text),         # B5.4, B5.5 (強度)
                         "partner_info": clean_text(cells[7].text),      # B5.7 (併せ馬情報)
-                        # TODO: Extract other B5 fields if available (e.g., B5.8-B5.12 - comments, form etc. might be elsewhere)
+                        # B5.8 (坂路馬場状態/時間帯), B5.9 (Wコース内外) - Often part of location_detail or needs separate extraction if available
+                        # B5.10 (比較) - Requires historical data, not directly scraped here
+                        # B5.11 (映像) - Link might be present, needs specific check
                     }
                     # Clean up potentially empty fields
                     workout = {k: v for k, v in workout.items() if v}
@@ -567,6 +533,28 @@ def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argume
                     logger.debug(f"Skipping training row due to insufficient cells ({len(cells)}): {row}")
         else:
              logger.warning(f"Training table ('oikiri_table' guess) not found or not a Tag on {training_url} for horse {horse_id}. Needs investigation.")
+
+        # --- Extract Stable Comments (B5.12) ---
+        # !!! SELECTOR VERIFICATION NEEDED: Common patterns include divs with class 'CommentArea' or similar. !!!
+        logger.debug("Looking for stable comments section...")
+        comment_section = soup.find("div", class_=re.compile("comment", re.IGNORECASE)) # Guessing class name
+        if comment_section and isinstance(comment_section, Tag):
+            # Comments might be in <p> tags or list items <li>
+            comments = comment_section.find_all(['p', 'li'])
+            if comments:
+                for comment in comments:
+                    comment_text = clean_text(comment.text)
+                    if comment_text:
+                        training_data["comments"].append(comment_text)
+                logger.info(f"Found {len(training_data['comments'])} potential stable comments for {horse_id}.")
+            else:
+                # Fallback: get all text if specific tags not found
+                comment_text = clean_text(comment_section.text)
+                if comment_text:
+                    training_data["comments"].append(comment_text)
+                    logger.info(f"Found comment section text (fallback) for {horse_id}.")
+        else:
+            logger.debug(f"Comment section (guessed class 'comment') not found for horse {horse_id}.")
 
 
     except Exception as e:

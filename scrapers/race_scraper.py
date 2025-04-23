@@ -218,11 +218,11 @@ def scrape_race_info(soup, race_id):
 from typing import Dict, Any, Optional, List # Add typing imports
 
 def scrape_detailed_race_results(race_id: str) -> Dict[str, Any]:
-    """Scrapes detailed results like lap times from the race result page."""
+    """Scrapes detailed results like lap times, weather, track details from the race result page.""" # Updated docstring
     logger.info(f"Scraping detailed results (lap times, weather, track details) for race {race_id}...")
     # Add type hint for the dictionary structure
     detailed_results_data: Dict[str, Any] = {
-        "weather_track_details": {},
+        "weather_track_details": {}, # Initialize as empty dict
         "lap_times": None,
         "pace_segments": None,
         "time_diffs": {}
@@ -238,39 +238,63 @@ def scrape_detailed_race_results(race_id: str) -> Dict[str, Any]:
         # --- Extract Weather/Track Details (A3, A4) ---
         logger.debug("Looking for weather/track detail information (RaceData01)...")
         race_data01_div = soup.find("div", class_="RaceData01")
+        weather_track_details = {} # Use a temporary dict
         if race_data01_div and isinstance(race_data01_div, Tag):
             details_text = clean_text(race_data01_div.text)
             logger.debug(f"Found RaceData01 text: {details_text}")
-            # Example: "芝:良 / ダート:稍重  天候:晴  芝:良  発走時間:15:40" - This is often less detailed
-            # Look for more specific elements if available, e.g., within spans or specific classes
-            # This section on the result page might be less detailed than desired.
-            # Let's store the raw text for now.
-            detailed_results_data["weather_track_details"]["summary_text"] = details_text
+            # Example: "芝:良 / ダート:稍重  天候:晴  芝:良  発走時間:15:40"
+            # Example with more details: "天候:晴 / 芝:良 / ダート:稍重 / 馬場水分:芝 G前 10.5% 4角 10.8% / ダ G前 3.2% 4角 3.5% / クッション値:9.5"
+            weather_track_details["summary_text"] = details_text
 
-            # Attempt to parse common patterns (might be redundant with scrape_race_info but good fallback)
-            # Add check to ensure details_text is a string before searching
             if isinstance(details_text, str):
+                # Basic Weather (A3.6)
                 weather_match = re.search(r"天候:(\S+)", details_text)
                 if weather_match:
-                    detailed_results_data["weather_track_details"]["weather"] = weather_match.group(1) # A3.6
+                    weather_track_details["weather"] = weather_match.group(1)
 
+                # Basic Track Condition (A4.1)
                 condition_match_shiba = re.search(r"芝:(\S+)", details_text)
                 if condition_match_shiba:
-                     detailed_results_data["weather_track_details"]["track_condition_shiba"] = condition_match_shiba.group(1) # A4.1
-
+                     weather_track_details["track_condition_shiba"] = condition_match_shiba.group(1)
                 condition_match_dirt = re.search(r"ダート:(\S+)", details_text)
                 if condition_match_dirt:
-                     detailed_results_data["weather_track_details"]["track_condition_dirt"] = condition_match_dirt.group(1) # A4.1
+                     weather_track_details["track_condition_dirt"] = condition_match_dirt.group(1)
+
+                # Temperature (A3.6) - Often not present here, might need JRA source
+                temp_match = re.search(r"気温:([\d\.]+)℃", details_text) # Guessing pattern
+                if temp_match:
+                    weather_track_details["temperature_celsius"] = temp_match.group(1)
+                    logger.debug(f"Found temperature: {weather_track_details['temperature_celsius']}")
+
+                # Moisture Content (A4.2, A4.3) - Look for specific patterns
+                moisture_shiba_g_match = re.search(r"芝 G前 ([\d\.]+)%", details_text)
+                if moisture_shiba_g_match: weather_track_details["moisture_shiba_goal"] = moisture_shiba_g_match.group(1)
+                moisture_shiba_4c_match = re.search(r"芝 4角 ([\d\.]+)%", details_text)
+                if moisture_shiba_4c_match: weather_track_details["moisture_shiba_4c"] = moisture_shiba_4c_match.group(1)
+                moisture_dirt_g_match = re.search(r"ダ G前 ([\d\.]+)%", details_text)
+                if moisture_dirt_g_match: weather_track_details["moisture_dirt_goal"] = moisture_dirt_g_match.group(1)
+                moisture_dirt_4c_match = re.search(r"ダ 4角 ([\d\.]+)%", details_text)
+                if moisture_dirt_4c_match: weather_track_details["moisture_dirt_4c"] = moisture_dirt_4c_match.group(1)
+                if any(k.startswith("moisture_") for k in weather_track_details):
+                    logger.debug(f"Found moisture data: { {k:v for k,v in weather_track_details.items() if k.startswith('moisture_')} }")
+
+
+                # Cushion Value (A4.4) - Look for specific pattern
+                cushion_match = re.search(r"クッション値:([\d\.]+)", details_text)
+                if cushion_match:
+                    weather_track_details["cushion_value"] = cushion_match.group(1)
+                    logger.debug(f"Found cushion value: {weather_track_details['cushion_value']}")
+
+                # Wind (A3.4, A3.5) - Often not present here, might need JRA source
+                # wind_match = re.search(r"風速:(\S+) ([\d\.]+)m", details_text) # Guessing pattern
+                # if wind_match:
+                #     weather_track_details["wind_direction"] = wind_match.group(1)
+                #     weather_track_details["wind_speed_mps"] = wind_match.group(2)
+
             else:
                 logger.warning(f"RaceData01 details_text was not a string, skipping regex search for race {race_id}")
 
-            # --- TODO: Look for more specific A3/A4 items if present ---
-            # e.g., Temperature, Wind, Cushion Value, Moisture - These might be in different divs or require JRA site scraping.
-            # logger.debug("Searching for specific weather/track elements...")
-            # temp_span = soup.find(...)
-            # if temp_span: detailed_results_data["weather_track_details"]["temperature"] = clean_text(temp_span.text) # A3.6
-            # cushion_span = soup.find(...)
-            # if cushion_span: detailed_results_data["weather_track_details"]["cushion_value"] = clean_text(cushion_span.text) # A4.4
+            detailed_results_data["weather_track_details"] = weather_track_details # Assign the populated dict
 
         else:
             logger.warning(f"Could not find weather/track details section ('div.RaceData01') on page: {result_page_url}")
@@ -378,3 +402,25 @@ def scrape_detailed_race_results(race_id: str) -> Dict[str, Any]:
 
     logger.info(f"Finished scraping detailed results page for race {race_id}.")
     return detailed_results_data
+
+
+# --- Placeholder for Course Details Scraper (A2) ---
+def scrape_course_details(venue_name: str) -> Dict[str, Any]:
+    """
+    (Placeholder) Scrapes detailed course characteristics (A2) for a given venue.
+    Requires identifying the correct URL structure for Netkeiba course pages.
+    """
+    logger.warning(f"Course detail scraping (scrape_course_details) for venue '{venue_name}' is not yet implemented.")
+    # Example URL structure (needs verification):
+    # course_url = f"https://db.netkeiba.com/course/map/{venue_code}.html" # venue_code needs mapping from venue_name
+    # soup = get_soup(course_url)
+    # if soup:
+    #     # --- Extraction Logic for A2 items ---
+    #     # A2.1 Layout: Find image tag?
+    #     # A2.2 Straight Length: Find specific text/table cell
+    #     # A2.3 Corner Shape: Find description text
+    #     # A2.4 Elevation: Find description or data points
+    #     # A2.5 Start Distance: Find description
+    #     # A2.6/A2.7 Bias Data: Find stats tables
+    #     pass
+    return {"venue_name": venue_name, "status": "Not Implemented"}

@@ -110,7 +110,68 @@ def scrape_trainer_profile(trainer_id):
                     logger.warning(f"Skipping stats table parsing because first header was None or empty: {headers}")
                     continue # Skip this table if the first header is invalid
 
+            # --- Add parsing for other specific table types ---
+
+            # Rotation Summary (C2.6) - Header guess: "ローテーション" or "間隔"
+            elif headers and ("ローテーション" in headers or "間隔" in headers) and "勝率" in headers:
+                logger.debug(f"Parsing rotation summary table: {headers}")
+                table_key = "summary_rotation"
+                trainer_data["stats"][table_key] = []
+                body = table.find("tbody")
+                if body and isinstance(body, Tag):
+                    rows = body.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if len(cells) >= len(headers):
+                            item_data = {headers[i]: clean_text(cells[i].text) for i in range(len(headers))}
+                            trainer_data["stats"][table_key].append(item_data)
+                            logger.debug(f"  Added {table_key} data: {item_data}")
+                else:
+                    logger.warning(f"Could not find tbody in {table_key} table for trainer {trainer_id}")
+
+            # Class Summary (C2.7) - Header guess: "クラス" or "条件"
+            elif headers and ("クラス" in headers or "条件" in headers) and "勝率" in headers:
+                logger.debug(f"Parsing class summary table: {headers}")
+                table_key = "summary_class"
+                trainer_data["stats"][table_key] = []
+                body = table.find("tbody")
+                if body and isinstance(body, Tag):
+                    rows = body.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if len(cells) >= len(headers):
+                            item_data = {headers[i]: clean_text(cells[i].text) for i in range(len(headers))}
+                            trainer_data["stats"][table_key].append(item_data)
+                            logger.debug(f"  Added {table_key} data: {item_data}")
+                else:
+                    logger.warning(f"Could not find tbody in {table_key} table for trainer {trainer_id}")
+
             # Add more parsing logic for other table types if needed
+
+        # --- Extract Stable Comments (C2.9) ---
+        # !!! SELECTOR VERIFICATION NEEDED: Common patterns include divs with class 'Comment' or similar. !!!
+        logger.debug("Looking for stable comments section...")
+        # Comments might be associated with the profile or recent news sections
+        comment_section = soup.find("div", class_=re.compile("comment", re.IGNORECASE)) # General guess
+        trainer_data["comments"] = [] # Initialize comments list
+        if comment_section and isinstance(comment_section, Tag):
+            # Comments might be in <p> tags or list items <li>
+            comments = comment_section.find_all(['p', 'li'])
+            if comments:
+                for comment in comments:
+                    comment_text = clean_text(comment.text)
+                    if comment_text:
+                        trainer_data["comments"].append(comment_text)
+                logger.info(f"Found {len(trainer_data['comments'])} potential stable comments for trainer {trainer_id}.")
+            else:
+                # Fallback: get all text if specific tags not found
+                comment_text = clean_text(comment_section.text)
+                if comment_text:
+                    trainer_data["comments"].append(comment_text)
+                    logger.info(f"Found comment section text (fallback) for trainer {trainer_id}.")
+        else:
+            logger.debug(f"Comment section (guessed class 'comment') not found for trainer {trainer_id}.")
+
 
     except Exception as e:
         logger.error(f"Error scraping trainer profile for {trainer_id}: {e}", exc_info=True)

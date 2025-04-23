@@ -1,11 +1,17 @@
 """
 Scraping functions related to odds and payouts.
 """
+import re # Added import
 import time
 from datetime import datetime
 from itertools import zip_longest
 from bs4 import BeautifulSoup, Tag
 from selenium.webdriver.remote.webdriver import WebDriver # Import WebDriver for type hinting
+from selenium.webdriver.common.by import By # Added import
+from selenium.common.exceptions import NoSuchElementException, TimeoutException # Added import
+from selenium.webdriver.support.ui import WebDriverWait # Added import
+from selenium.webdriver.support import expected_conditions as EC # Added import
+
 
 # Import shared utilities and config
 from utils import clean_text
@@ -51,7 +57,8 @@ def scrape_odds(race_soup: BeautifulSoup, race_id: str):
             payout_yen_text = clean_text(tds[1].text)
             popularity_text = clean_text(tds[2].text) if len(tds) > 2 else None
 
-            payout_yen_str = payout_yen_text.replace(",", "") if payout_yen_text else ""
+            # Check if payout_yen_text is a string before replacing
+            payout_yen_str = payout_yen_text.replace(",", "") if isinstance(payout_yen_text, str) else ""
             popularity_str = popularity_text if popularity_text else None
 
             try:
@@ -64,13 +71,42 @@ def scrape_odds(race_soup: BeautifulSoup, race_id: str):
 
             if bet_type == "tan": # 単勝
                 payouts["win"] = {"umaban": numbers, "payout": payout_yen, "popularity": popularity}
-            elif bet_type == "fuku": # 複勝
-                # Check if numbers and pays are not None before splitting
-                nums = numbers.split() if numbers else []
-                pays = payout_yen_str.split() if payout_yen_str else []
-                pops = popularity_str.split() if popularity_str else []
-                # Use zip_longest to handle lists of potentially different lengths (extend calls removed)
-                payouts["place"] = [{"umaban": n, "payout": p, "popularity": pop} for n, p, pop in zip_longest(nums, pays, pops, fillvalue=None)]
+            elif bet_type == "fuku": # 複勝 (Place) - Revised Parsing
+                # Attempt to find individual entries within the cells
+                num_cell, pay_cell, pop_cell = tds[0], tds[1], tds[2] if len(tds) > 2 else None
+                # Find potential entries (e.g., separated by <br> or within simple tags)
+                # This is a guess - might need find_all('span') or similar depending on actual structure
+                nums_raw = [clean_text(t) for t in num_cell.find_all(string=True, recursive=False) if clean_text(t)] or \
+                           [clean_text(num_cell.text)] # Fallback to full text
+                # Add check for string before replace, including in the fallback - Revised
+                pays_from_children = [clean_text(t).replace(",", "") for t in pay_cell.find_all(string=True, recursive=False) if isinstance(clean_text(t), str)]
+                if not pays_from_children:
+                    pay_cell_text = clean_text(pay_cell.text)
+                    pays_raw = [pay_cell_text.replace(",", "") if isinstance(pay_cell_text, str) else ""]
+                else:
+                    pays_raw = pays_from_children
+                pops_raw = []
+                if pop_cell:
+                    pops_raw = [clean_text(t) for t in pop_cell.find_all(string=True, recursive=False) if clean_text(t)] or \
+                               [clean_text(pop_cell.text)]
+
+                # Clean up empty strings that might result from splitting/finding
+                nums = [n for n in nums_raw if n]
+                pays = [p for p in pays_raw if p]
+                pops = [p for p in pops_raw if p]
+
+                logger.debug(f"Fuku raw parsed: nums={nums}, pays={pays}, pops={pops}")
+
+                payouts["place"] = []
+                for n, p, pop in zip_longest(nums, pays, pops, fillvalue=None):
+                    try:
+                        payout_val = int(p) if p and p.isdigit() else None
+                        pop_val = int(pop) if pop and pop.isdigit() else None
+                    except (ValueError, TypeError):
+                        payout_val = None
+                        pop_val = None
+                    payouts["place"].append({"umaban": n, "payout": payout_val, "popularity": pop_val})
+
             elif bet_type == "waku": # 枠連
                 payouts["wakuren"] = {"waku_pair": numbers, "payout": payout_yen, "popularity": popularity}
             elif bet_type == "uren": # 馬連
@@ -89,7 +125,8 @@ def scrape_odds(race_soup: BeautifulSoup, race_id: str):
             payout_yen_text = clean_text(tds[1].text)
             popularity_text = clean_text(tds[2].text) if len(tds) > 2 else None
 
-            payout_yen_str = payout_yen_text.replace(",", "") if payout_yen_text else ""
+            # Check if payout_yen_text is a string before replacing
+            payout_yen_str = payout_yen_text.replace(",", "") if isinstance(payout_yen_text, str) else ""
             popularity_str = popularity_text if popularity_text else None
 
             try:
@@ -100,13 +137,41 @@ def scrape_odds(race_soup: BeautifulSoup, race_id: str):
                  payout_yen = None
                  popularity = None
 
-            if bet_type == "wide": # ワイド
-                # Check if numbers and pays are not None before splitting
-                nums = numbers.split() if numbers else []
-                pays = payout_yen_str.split() if payout_yen_str else []
-                pops = popularity_str.split() if popularity_str else []
-                # Use zip_longest to handle lists of potentially different lengths (extend calls removed)
-                payouts["wide"] = [{"umaban_pair": n, "payout": p, "popularity": pop} for n, p, pop in zip_longest(nums, pays, pops, fillvalue=None)]
+            if bet_type == "wide": # ワイド (Wide) - Revised Parsing
+                num_cell, pay_cell, pop_cell = tds[0], tds[1], tds[2] if len(tds) > 2 else None
+                # Find potential entries (e.g., separated by <br> or within simple tags)
+                nums_raw = [clean_text(t) for t in num_cell.find_all(string=True, recursive=False) if clean_text(t)] or \
+                           [clean_text(num_cell.text)]
+                # Add check for string before replace, including in the fallback - Revised
+                pays_from_children = [clean_text(t).replace(",", "") for t in pay_cell.find_all(string=True, recursive=False) if isinstance(clean_text(t), str)]
+                if not pays_from_children:
+                    pay_cell_text = clean_text(pay_cell.text)
+                    pays_raw = [pay_cell_text.replace(",", "") if isinstance(pay_cell_text, str) else ""]
+                else:
+                    pays_raw = pays_from_children
+                pops_raw = []
+                if pop_cell:
+                    pops_raw = [clean_text(t) for t in pop_cell.find_all(string=True, recursive=False) if clean_text(t)] or \
+                               [clean_text(pop_cell.text)]
+
+                # Clean up empty strings
+                nums = [n for n in nums_raw if n]
+                pays = [p for p in pays_raw if p]
+                pops = [p for p in pops_raw if p]
+
+                logger.debug(f"Wide raw parsed: nums={nums}, pays={pays}, pops={pops}")
+
+                payouts["wide"] = []
+                for n, p, pop in zip_longest(nums, pays, pops, fillvalue=None):
+                    try:
+                        # Wide payout might be a range "XXX-XXX" or single value
+                        payout_val_str = p
+                        pop_val = int(pop) if pop and pop.isdigit() else None
+                    except (ValueError, TypeError):
+                        payout_val_str = None
+                        pop_val = None
+                    payouts["wide"].append({"umaban_pair": n, "payout": payout_val_str, "popularity": pop_val})
+
             elif bet_type == "utan": # 馬単
                 payouts["umatan"] = {"umaban_order": numbers, "payout": payout_yen, "popularity": popularity}
             elif bet_type == "sanfuku": # ３連複
@@ -125,7 +190,7 @@ def scrape_odds(race_soup: BeautifulSoup, race_id: str):
 
 
 def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
-    """Scrapes live odds information using Selenium."""
+    """Scrapes live odds information using Selenium, including multiple bet types.""" # Updated docstring
     logger.info(f"Scraping live odds for race {race_id}...")
     live_odds_data = {"race_id": race_id, "timestamp": datetime.now().isoformat(), "odds": {}} # Initialize with timestamp and odds dict
     odds_url = f"https://race.netkeiba.com/odds/index.html?race_id={race_id}" # Common odds page
@@ -137,15 +202,24 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
     try:
         logger.info(f"Fetching live odds page with Selenium: {odds_url}")
         driver.get(odds_url)
-        time.sleep(SELENIUM_WAIT_TIME) # Wait for odds tables to potentially load/update
-        page_source = driver.page_source
-        soup = BeautifulSoup(page_source, "html.parser")
-        logger.debug(f"Successfully fetched live odds page source for race {race_id}")
+        # Use WebDriverWait for initial page load check (e.g., wait for Tan/Fuku container)
+        try:
+            WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                EC.presence_of_element_located((By.ID, "odds_tanpuku_list"))
+            )
+            logger.debug("Initial odds page loaded (Tan/Fuku container found).")
+        except TimeoutException:
+            logger.error(f"Timeout waiting for initial odds page elements on {odds_url}")
+            return live_odds_data
 
-        # --- Extract Odds Tables (D1.1 - D1.7) ---
+        # --- Helper function to get soup after potential AJAX loads ---
+        def get_current_soup(webdriver):
+            return BeautifulSoup(webdriver.page_source, "html.parser")
+
+        # --- Scrape Tan/Fuku (Initial View) ---
+        soup = get_current_soup(driver)
         odds_container = soup.find("div", id="odds_tanpuku_list") # Main container for Tan/Fuku
         if odds_container and isinstance(odds_container, Tag):
-            # Tan/Fuku Table (D1.1, D1.2)
             tanfuku_table = odds_container.find("table") # Usually the first table inside
             if tanfuku_table and isinstance(tanfuku_table, Tag):
                 live_odds_data["odds"]["tan_fuku"] = []
@@ -168,27 +242,282 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
                                 "popularity": popularity # Current popularity based on win odds
                             }
                             live_odds_data["odds"]["tan_fuku"].append(odds_entry)
-                            logger.debug(f"Added Tan/Fuku odds: {odds_entry}")
+                            # logger.debug(f"Added Tan/Fuku odds: {odds_entry}") # Reduce log verbosity
                         except Exception as e:
                             logger.warning(f"Error parsing Tan/Fuku row: {row}. Error: {e}")
+                logger.info(f"Successfully scraped Tan/Fuku odds ({len(live_odds_data['odds']['tan_fuku'])} entries).")
             else:
                 logger.warning(f"Tan/Fuku odds table not found within 'odds_tanpuku_list' for race {race_id}")
         else:
             logger.warning(f"Odds container 'odds_tanpuku_list' not found for race {race_id}")
 
-        # --- TODO: Extract other odds types (Umaren, Wide, Umatan, Sanfuku, Santan) ---
-        # These are often in different sections/tabs or loaded via JavaScript interactions.
-        # Requires further investigation of the odds page structure and potentially clicking tabs/buttons with Selenium.
-        # Example selectors (might need adjustment):
-        # umaren_wide_container = soup.find("div", id="odds_umaren_list")
-        # umatan_container = soup.find("div", id="odds_umatan_list")
-        # sanfuku_container = soup.find("div", id="odds_sanrenpuku_list")
-        # santan_container = soup.find("div", id="odds_sanrentan_list")
-        logger.warning(f"Scraping for Umaren, Wide, Umatan, Sanfuku, Santan odds is not yet implemented for race {race_id}.")
+        # --- Function to click tab and parse matrix/list odds ---
+        # Updated to wait for content within the main form div to change/appear
+        def click_and_parse_odds(tab_selector_tuple, target_element_locator, odds_key, parse_func):
+            # target_element_locator: A tuple (By, selector) for an element expected inside the loaded content
+            main_content_div_id = "odds_view_form" # Div where content is loaded
+            try:
+                logger.info(f"Attempting to click tab: {tab_selector_tuple}")
+                tab_element = WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                    EC.element_to_be_clickable(tab_selector_tuple)
+                )
+                # Get current content signature before click (e.g., first few chars of the div)
+                # This helps detect if content actually changed, though not foolproof
+                try:
+                    before_content_sig = driver.find_element(By.ID, main_content_div_id).text[:50]
+                except:
+                    before_content_sig = "" # Handle case where div might be empty initially
+
+                tab_element.click()
+                logger.info(f"Clicked tab {tab_selector_tuple}. Waiting for target element {target_element_locator} within #{main_content_div_id}...")
+
+                # Wait for a specific element expected within the newly loaded content
+                WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, f"#{main_content_div_id} {target_element_locator[1]}"))
+                    # Example: Wait for a table inside the form: EC.presence_of_element_located((By.CSS_SELECTOR, f"#{main_content_div_id} table"))
+                )
+                # Optional: Add a small sleep or check if content signature changed
+                time.sleep(1.5) # Increased buffer slightly for JS rendering
+
+                logger.debug(f"Target element {target_element_locator} found. Parsing content within #{main_content_div_id}...")
+                current_soup = get_current_soup(driver)
+                # Pass the main container soup to the parsing function
+                main_content_soup = current_soup.find("div", id=main_content_div_id)
+                if not main_content_soup:
+                     logger.warning(f"Could not find main content div #{main_content_div_id} after clicking tab.")
+                     return # Exit if main container not found
+
+                odds_list = parse_func(main_content_soup) # Pass the container's soup
+                if odds_list:
+                    # Handle combined results like umaren/wide
+                    if isinstance(odds_list, dict) and odds_key == "umaren_wide":
+                         if odds_list.get("umaren"):
+                             live_odds_data["odds"]["umaren"] = odds_list["umaren"]
+                             logger.info(f"Successfully scraped umaren odds ({len(odds_list['umaren'])} entries).")
+                         if odds_list.get("wide"):
+                             live_odds_data["odds"]["wide"] = odds_list["wide"]
+                             logger.info(f"Successfully scraped wide odds ({len(odds_list['wide'])} entries).")
+                    elif isinstance(odds_list, list) and odds_list:
+                         live_odds_data["odds"][odds_key] = odds_list
+                         logger.info(f"Successfully scraped {odds_key} odds ({len(odds_list)} entries).")
+                    else:
+                         logger.warning(f"Parsing function returned empty or invalid data for {odds_key}.")
+                else:
+                    # Corrected log message: container_id is not defined here anymore
+                    logger.warning(f"Parsing function returned no data for {odds_key}.")
+
+            except TimeoutException:
+                logger.warning(f"Timeout waiting for tab {tab_selector_tuple} or target element {target_element_locator}.")
+            except NoSuchElementException:
+                logger.warning(f"Could not find tab element {tab_selector_tuple}.")
+            except Exception as e:
+                logger.error(f"Error clicking tab {tab_selector_tuple} or parsing {main_content_div_id}: {e}", exc_info=True)
+
+        # --- Parsing Functions for Different Odds Types ---
+        # Updated functions to accept the container soup directly
+        def parse_umaren_wide(container_soup):
+            """Parses Umaren (馬連) and Wide (ワイド) odds from their shared container soup."""
+            odds_data = {"umaren": [], "wide": []}
+            if not container_soup or not isinstance(container_soup, Tag):
+                logger.warning(f"Invalid container soup passed to parse_umaren_wide.")
+                return None
+
+            # Find Umaren table: Look for the first table within the container,
+            # potentially checking for a header containing '馬連' if needed for robustness.
+            umaren_table = container_soup.find("table") # Find the first table
+            # Optional check: if umaren_table and not umaren_table.find("th", string=re.compile("馬連")): umaren_table = None
+
+            if umaren_table and isinstance(umaren_table, Tag):
+                logger.debug("Found potential Umaren table within container.")
+                rows = umaren_table.find_all("tr")
+                header_cells = rows[0].find_all("th") if rows else []
+                # Get horse numbers from header (skip first cell)
+                header_nums = [clean_text(th.text) for th in header_cells[1:]]
+
+                for row in rows[1:]: # Skip header row
+                    cells = row.find_all("td")
+                    row_header_th = row.find("th")
+                    if not row_header_th or len(cells) != len(header_nums): continue # Check alignment
+                    row_num = clean_text(row_header_th.text)
+
+                    for i, cell in enumerate(cells):
+                        col_num = header_nums[i]
+                        # Ensure numbers are valid strings and digits before combining/comparing
+                        if isinstance(row_num, str) and row_num.isdigit() and \
+                           isinstance(col_num, str) and col_num.isdigit() and \
+                           int(row_num) < int(col_num):
+                            odds_val = clean_text(cell.text)
+                            if odds_val and odds_val != '---': # Check for valid odds
+                                odds_data["umaren"].append({
+                                    "umaban_pair": f"{row_num}-{col_num}",
+                                    "odds": odds_val
+                                })
+            else:
+                logger.warning(f"Umaren table not found or invalid within the provided container soup.")
+
+            # Find Wide table: Often follows Umaren or is the second table.
+            # This assumes Wide data might be in a *separate* table following Umaren.
+            # If they are in the *same* table, this logic needs adjustment.
+            all_tables = container_soup.find_all("table")
+            wide_table = None
+            if len(all_tables) > 1:
+                 # Try the second table, potentially check header for 'ワイド'
+                 wide_table_candidate = all_tables[1]
+                 # Optional check: if wide_table_candidate.find("th", string=re.compile("ワイド")): wide_table = wide_table_candidate
+                 # For now, assume the second table is Wide if it exists
+                 wide_table = wide_table_candidate
+            elif umaren_table: # If only one table, assume it might contain Wide too (less likely based on typical structure)
+                 logger.debug("Only one table found, assuming Wide might be combined or absent.")
+                 # wide_table = umaren_table # Uncomment if Wide is in the same table
+
+            if wide_table and isinstance(wide_table, Tag):
+                 logger.debug("Found potential Wide table within container.")
+                 rows = wide_table.find_all("tr")
+                 header_cells = rows[0].find_all("th") if rows else []
+                 header_nums = [clean_text(th.text) for th in header_cells[1:]]
+
+                 for row in rows[1:]:
+                     cells = row.find_all("td")
+                     row_header_th = row.find("th")
+                     if not row_header_th or len(cells) != len(header_nums): continue
+                     row_num = clean_text(row_header_th.text)
+
+                     for i, cell in enumerate(cells):
+                         col_num = header_nums[i]
+                         # Ensure numbers are valid strings and digits before combining/comparing
+                         if isinstance(row_num, str) and row_num.isdigit() and \
+                            isinstance(col_num, str) and col_num.isdigit() and \
+                            int(row_num) < int(col_num):
+                             # Wide odds often have min-max
+                             odds_range = clean_text(cell.text)
+                             if odds_range and odds_range != '---':
+                                 odds_data["wide"].append({
+                                     "umaban_pair": f"{row_num}-{col_num}",
+                                     "odds_range": odds_range
+                                 })
+            else:
+                logger.warning(f"Wide table not found or invalid within the provided container soup.")
+
+            # Return combined data only if at least one type was found
+            return odds_data if odds_data["umaren"] or odds_data["wide"] else None
+
+
+        def parse_umatan(container_soup):
+            """Parses Umatan (馬単) odds from the container soup."""
+            odds_list = []
+            if not container_soup or not isinstance(container_soup, Tag):
+                logger.warning(f"Invalid container soup passed to parse_umatan.")
+                return None
+            # Umatan often uses a matrix table. Find the first table in the container.
+            umatan_table = container_soup.find("table") # Find the first table
+            # Optional check: if umatan_table and not umatan_table.find("th", string=re.compile("馬単")): umatan_table = None
+
+            if umatan_table and isinstance(umatan_table, Tag):
+                logger.debug("Found potential Umatan table within container.")
+                rows = umatan_table.find_all("tr")
+                header_cells = rows[0].find_all("th") if rows else []
+                header_nums = [clean_text(th.text) for th in header_cells[1:]] # 2nd place horse
+
+                for row in rows[1:]: # Skip header row
+                    cells = row.find_all("td")
+                    row_header_th = row.find("th")
+                    if not row_header_th or len(cells) != len(header_nums): continue
+                    first_place_num = clean_text(row_header_th.text) # 1st place horse
+
+                    for i, cell in enumerate(cells):
+                        second_place_num = header_nums[i]
+                        # Ensure numbers are valid strings and digits and different
+                        if isinstance(first_place_num, str) and first_place_num.isdigit() and \
+                           isinstance(second_place_num, str) and second_place_num.isdigit() and \
+                           first_place_num != second_place_num:
+                            odds_val = clean_text(cell.text)
+                            if odds_val and odds_val != '---':
+                                odds_list.append({
+                                    "umaban_order": f"{first_place_num}-{second_place_num}",
+                                    "odds": odds_val
+                                })
+            else:
+                logger.warning(f"Umatan table not found or invalid within the provided container soup.")
+            return odds_list if odds_list else None
+
+        def parse_sanrenpuku(container_soup):
+            """Parses Sanrenpuku (３連複) odds from the container soup."""
+            # Sanrenpuku is complex. Placeholder logic remains.
+            odds_list = []
+            if not container_soup or not isinstance(container_soup, Tag):
+                logger.warning(f"Invalid container soup passed to parse_sanrenpuku.")
+                return None
+            # Example: Find tables associated with each 1st axis horse (adjust selector)
+            # tables = container_soup.find_all("table", class_="Odds_Table_Small") # Example class
+            # for table in tables:
+            #     # Parse combinations and odds within each table
+            #     pass
+            logger.warning(f"Sanrenpuku parsing logic is complex and not fully implemented. Needs specific page analysis.")
+            # Placeholder: Try finding any odds-like text within the container
+            odds_elements = container_soup.find_all(string=re.compile(r"\d+\.\d+")) # Find text matching odds pattern
+            if odds_elements:
+                 logger.debug(f"Found {len(odds_elements)} potential Sanrenpuku odds elements (unstructured).")
+                 odds_list.append({"raw_data_found": len(odds_elements)}) # Indicate data was found but not parsed structuredly
+            else:
+                 logger.warning("No potential Sanrenpuku odds elements found in container.")
+            return odds_list if odds_list else None
+
+
+        def parse_sanrentan(container_soup):
+            """Parses Sanrentan (３連単) odds from the container soup."""
+            # Sanrentan is even more complex. Placeholder logic remains.
+            odds_list = []
+            if not container_soup or not isinstance(container_soup, Tag):
+                logger.warning(f"Invalid container soup passed to parse_sanrentan.")
+                return None
+            # Example: May involve selecting 1st, then 2nd, then seeing odds for 3rd
+            # Requires significant interaction simulation or complex table parsing
+            logger.warning(f"Sanrentan parsing logic is extremely complex and not fully implemented. Needs specific page analysis.")
+            # Placeholder: Try finding any odds-like text within the container
+            odds_elements = container_soup.find_all(string=re.compile(r"\d+\.\d+")) # Find text matching odds pattern
+            if odds_elements:
+                 logger.debug(f"Found {len(odds_elements)} potential Sanrentan odds elements (unstructured).")
+                 odds_list.append({"raw_data_found": len(odds_elements)}) # Indicate data was found but not parsed structuredly
+            else:
+                 logger.warning("No potential Sanrentan odds elements found in container.")
+            return odds_list if odds_list else None
+
+
+        # --- Click Tabs and Parse ---
+        # Using corrected tab selectors and waiting logic
+
+        # Define target elements to wait for within each loaded section (these are guesses)
+        # We wait for a table element as a general indicator content has loaded
+        table_locator = (By.TAG_NAME, "table")
+
+        # Umaren / Wide (Tab b4 / b5) - Often loaded together
+        umaren_tab_selector = (By.CSS_SELECTOR, "li#odds_navi_b4 a")
+        # Click Umaren tab, expect a table, parse both Umaren and Wide
+        click_and_parse_odds(umaren_tab_selector, table_locator, "umaren_wide", parse_umaren_wide)
+        # Note: Wide tab (b5) might load the same content, so clicking it might be redundant
+        # If they load separately, add:
+        # wide_tab_selector = (By.CSS_SELECTOR, "li#odds_navi_b5 a")
+        # click_and_parse_odds(wide_tab_selector, table_locator, "wide", parse_umaren_wide) # Need adjusted parse func if separate
+
+        # Umatan (Tab b6)
+        umatan_tab_selector = (By.CSS_SELECTOR, "li#odds_navi_b6 a")
+        click_and_parse_odds(umatan_tab_selector, table_locator, "umatan", parse_umatan)
+
+        # Sanrenpuku (Tab b7)
+        sanrenpuku_tab_selector = (By.CSS_SELECTOR, "li#odds_navi_b7 a")
+        # Target element might be different if not a simple table
+        click_and_parse_odds(sanrenpuku_tab_selector, table_locator, "sanrenpuku", parse_sanrenpuku)
+
+        # Sanrentan (Tab b8)
+        sanrentan_tab_selector = (By.CSS_SELECTOR, "li#odds_navi_b8 a")
+        # Target element might be different if not a simple table
+        click_and_parse_odds(sanrentan_tab_selector, table_locator, "sanrentan", parse_sanrentan)
 
 
     except Exception as e:
         logger.error(f"Error scraping live odds for {race_id}: {e}", exc_info=True)
 
-    logger.info(f"Finished scraping live odds (Tan/Fuku only) for race {race_id}.")
+    # Update log message based on what was actually scraped
+    scraped_types = list(live_odds_data["odds"].keys())
+    logger.info(f"Finished scraping live odds for race {race_id}. Scraped types: {scraped_types}")
     return live_odds_data

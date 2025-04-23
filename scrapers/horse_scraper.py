@@ -499,43 +499,61 @@ def scrape_training(driver: WebDriver, horse_id: str): # Accept driver as argume
         logger.debug(f"Successfully fetched training page source for horse {horse_id}")
 
         # --- Extract Training Details (B5.1 - B5.7) ---
-        # !!! SELECTOR VERIFICATION NEEDED: 'oikiri_table' and cell indices are guesses. !!!
-        logger.debug(f"Looking for training table (guessed class 'oikiri_table') on {training_url}...")
-        training_table = soup.find("table", class_="oikiri_table") # Example: Common class for training tables
-
-        if training_table and isinstance(training_table, Tag):
-            rows = training_table.find_all("tr")
-            logger.info(f"Found {len(rows)-1} potential workout rows in training table for {horse_id}.")
-            for row in rows[1:]: # Skip header
-                cells = row.find_all("td")
-                # !!! INDICES VERIFICATION NEEDED: Assumed cell order. !!!
-                # Example: Date(0), Location(1), Course(2), Condition(3), TotalTime(4), LapTimes(5), Intensity(6), Partner(7)
-                if len(cells) > 7: # Check if enough cells exist based on assumption
-                    # Combine location/course/condition if needed
-                    location_detail = f"{clean_text(cells[1].text)} {clean_text(cells[2].text)} ({clean_text(cells[3].text)})"
-
-                    workout = {
-                        "date": clean_text(cells[0].text),              # B5.1, B5.5 (日付)
-                        "location_detail": location_detail,             # B5.1, B5.5 (場所, コース, 馬場状態 - B5.8 partially)
-                        "time_total": clean_text(cells[4].text),        # B5.2, B5.5 (全体時計)
-                        "time_laps": clean_text(cells[5].text),         # B5.3, B5.5 (ラップタイム)
-                        "intensity": clean_text(cells[6].text),         # B5.4, B5.5 (強度)
-                        "partner_info": clean_text(cells[7].text),      # B5.7 (併せ馬情報)
-                        # B5.8 (坂路馬場状態/時間帯), B5.9 (Wコース内外) - Often part of location_detail or needs separate extraction if available
-                        # B5.10 (比較) - Requires historical data, not directly scraped here
-                        # B5.11 (映像) - Link might be present, needs specific check
-                    }
-                    # Clean up potentially empty fields
-                    workout = {k: v for k, v in workout.items() if v}
-                    training_data["workouts"].append(workout)
-                    logger.debug(f"Added workout for {horse_id}: {workout}")
-                else:
-                    logger.debug(f"Skipping training row due to insufficient cells ({len(cells)}): {row}")
+        logger.debug(f"Looking for training tables...")
+        
+        training_tables = []
+        for table_class in ["WorkDataTable", "oikiri_table", "table_slide_body WorkDataTable"]:
+            tables = soup.find_all("table", class_=table_class)
+            if tables:
+                training_tables.extend(tables)
+        
+        if training_tables:
+            training_data["workouts"] = []
+            
+            for training_table in training_tables:
+                if not isinstance(training_table, Tag):
+                    continue
+                    
+                rows = training_table.find_all("tr")
+                for row in rows[1:]:  # Skip header
+                    cells = row.find_all("td")
+                    
+                    if len(cells) >= 8:  # Basic check for valid row
+                        # Combine location details for better context
+                        location_detail = f"{clean_text(cells[1].text)} {clean_text(cells[2].text)} ({clean_text(cells[3].text)})"
+                        
+                        workout = {
+                            "date": clean_text(cells[0].text),              # B5.1, B5.5 (日付)
+                            "location_detail": location_detail,             # B5.1, B5.5 (場所, コース, 馬場状態 - B5.8 partially)
+                            "time_total": clean_text(cells[4].text),        # B5.2, B5.5 (全体時計)
+                            "time_laps": clean_text(cells[5].text),         # B5.3, B5.5 (ラップタイム)
+                            "intensity": clean_text(cells[6].text),         # B5.4, B5.5 (強度)
+                            "partner_info": clean_text(cells[7].text),      # B5.7 (併せ馬情報)
+                        }
+                        
+                        # Extract additional details for B5.8, B5.9
+                        slope_match = re.search(r"坂路\s*([^(]*)", location_detail)
+                        if slope_match:
+                            workout["slope_condition"] = clean_text(slope_match.group(1))
+                            
+                        wcourse_match = re.search(r"W(内|外|直)", location_detail)
+                        if wcourse_match:
+                            workout["wcourse_position"] = wcourse_match.group(1)
+                            
+                        video_link = row.find("a", href=re.compile(r"video"))
+                        if video_link and "href" in video_link.attrs:
+                            workout["video_url"] = video_link["href"]
+                        
+                        # Clean up potentially empty fields
+                        workout = {k: v for k, v in workout.items() if v}
+                        training_data["workouts"].append(workout)
+                        logger.debug(f"Added workout data: {workout}")
+            
+            logger.info(f"Found {len(training_data['workouts'])} workout records for horse {horse_id}")
         else:
-             logger.warning(f"Training table ('oikiri_table' guess) not found or not a Tag on {training_url} for horse {horse_id}. Needs investigation.")
-
+            logger.warning(f"No training tables found on {training_url} for horse {horse_id}.")
+        
         # --- Extract Stable Comments (B5.12) ---
-        # !!! SELECTOR VERIFICATION NEEDED: Common patterns include divs with class 'CommentArea' or similar. !!!
         logger.debug("Looking for stable comments section...")
         comment_section = soup.find("div", class_=re.compile("comment", re.IGNORECASE)) # Guessing class name
         if comment_section and isinstance(comment_section, Tag):

@@ -16,5 +16,11 @@ REQUEST_DELAY = 1
 # URL template for the shutuba_past page
 SHUTUBA_PAST_URL = "https://race.netkeiba.com/race/shutuba_past.html?race_id={}&rf=shutuba_submenu"
 
+# URL template for the paddock page
+PADDOCK_URL = "https://race.netkeiba.com/race/paddock.html?race_id={}"
+
+# URL template for race announcements/news
+RACE_NEWS_URL = "https://race.netkeiba.com/race/news.html?race_id={}"
+
 # Time in seconds to wait for dynamic content to load in Selenium
 SELENIUM_WAIT_TIME = 2

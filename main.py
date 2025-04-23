@@ -4,6 +4,7 @@ Main script to orchestrate the Netkeiba race data scraping process.
 import argparse
 import json
 import re
+from datetime import datetime
 
 # Import configurations and utilities
 from config import BASE_URL_NETKEIBA
@@ -11,7 +12,7 @@ from logger_config import get_logger
 from utils import initialize_driver, get_soup
 
 # Import scraper functions
-from scrapers.race_scraper import scrape_race_info, scrape_detailed_race_results
+from scrapers.race_scraper import scrape_race_info, scrape_detailed_race_results, scrape_course_details
 from scrapers.horse_scraper import (
     scrape_horse_list,
     scrape_horse_details,
@@ -23,6 +24,9 @@ from scrapers.jockey_scraper import scrape_jockey_profile
 from scrapers.trainer_scraper import scrape_trainer_profile
 from scrapers.odds_scraper import scrape_odds, scrape_live_odds
 from scrapers.shutuba_scraper import scrape_shutuba_past
+from scrapers.paddock_scraper import scrape_paddock_info
+from scrapers.speed_figure_scraper import scrape_speed_figures
+from scrapers.announcement_scraper import scrape_race_announcements
 
 # Get logger instance
 logger = get_logger(__name__)
@@ -140,7 +144,26 @@ def main(race_id):
         live_odds = scrape_live_odds(driver, race_id) # Pass driver instance
         race_data["live_odds_data"] = live_odds # Add live odds under new key
 
-        # 8. Extract Payout Info (from main race page soup - already scraped)
+        logger.info("Scraping paddock information...")
+        paddock_info = scrape_paddock_info(driver, race_id)
+        race_data["paddock_info"] = paddock_info
+
+        logger.info("Scraping speed figures...")
+        speed_figures = scrape_speed_figures(race_id)
+        race_data["speed_figures"] = speed_figures
+
+        logger.info("Scraping race announcements...")
+        announcements = scrape_race_announcements(driver, race_id)
+        race_data["announcements"] = announcements
+
+        if "venue_name" in race_data:
+            logger.info(f"Scraping course details for venue {race_data['venue_name']}...")
+            course_details = scrape_course_details(race_data["venue_name"])
+            race_data["course_details"] = course_details
+        else:
+            logger.warning("Cannot scrape course details as venue_name is missing in race_data.")
+
+        # 12. Extract Payout Info (from main race page soup - already scraped)
         logger.info("Extracting payout info (from earlier race page scrape)...")
         # Need the race_soup obtained in step 1
         if race_soup:
@@ -151,17 +174,18 @@ def main(race_id):
             race_data["payouts"] = {}
 
 
-        # 9. Save to JSON
         output_filename = f"race_data_{race_id}.json"
-        logger.info(f"Saving data to {output_filename}...")
-        try:
-            with open(output_filename, "w", encoding="utf-8") as f:
-                json.dump(race_data, f, ensure_ascii=False, indent=2)
-            logger.info("Data saved successfully.")
-        except IOError as e:
-            logger.error(f"Error saving file {output_filename}: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during file saving: {e}", exc_info=True)
+        logger.info(f"Validating and saving data to {output_filename}...")
+        
+        race_data["timestamp"] = datetime.now().isoformat()
+        
+        from validator import validate_and_save_race_data
+        
+        validation_result = validate_and_save_race_data(race_data, output_filename)
+        if validation_result:
+            logger.info("Data validation successful. All required fields are present.")
+        else:
+            logger.warning("Data validation found missing fields. See validation report for details.")
 
     except Exception as e:
         logger.error(f"An unexpected error occurred during the main process for race {race_id}: {e}", exc_info=True)

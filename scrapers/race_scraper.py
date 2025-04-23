@@ -404,23 +404,66 @@ def scrape_detailed_race_results(race_id: str) -> Dict[str, Any]:
     return detailed_results_data
 
 
-# --- Placeholder for Course Details Scraper (A2) ---
+# --- Course Details Scraper (A2) ---
 def scrape_course_details(venue_name: str) -> Dict[str, Any]:
     """
-    (Placeholder) Scrapes detailed course characteristics (A2) for a given venue.
-    Requires identifying the correct URL structure for Netkeiba course pages.
+    Scrapes detailed course characteristics (A2) for a given venue.
     """
-    logger.warning(f"Course detail scraping (scrape_course_details) for venue '{venue_name}' is not yet implemented.")
-    # Example URL structure (needs verification):
-    # course_url = f"https://db.netkeiba.com/course/map/{venue_code}.html" # venue_code needs mapping from venue_name
-    # soup = get_soup(course_url)
-    # if soup:
-    #     # --- Extraction Logic for A2 items ---
-    #     # A2.1 Layout: Find image tag?
-    #     # A2.2 Straight Length: Find specific text/table cell
-    #     # A2.3 Corner Shape: Find description text
-    #     # A2.4 Elevation: Find description or data points
-    #     # A2.5 Start Distance: Find description
-    #     # A2.6/A2.7 Bias Data: Find stats tables
-    #     pass
-    return {"venue_name": venue_name, "status": "Not Implemented"}
+    logger.info(f"Scraping course details for venue '{venue_name}'...")
+    course_details = {"venue_name": venue_name}
+    
+    # Determine venue code from venue_name
+    venue_codes = {
+        "東京": "tokyo", "中山": "nakayama", "阪神": "hanshin", "京都": "kyoto",
+        "福島": "fukushima", "新潟": "niigata", "小倉": "kokura", "札幌": "sapporo",
+        "函館": "hakodate", "中京": "chukyo"
+    }
+    venue_code = venue_codes.get(venue_name)
+    
+    if not venue_code:
+        logger.warning(f"Unknown venue name '{venue_name}', cannot determine venue code.")
+        return course_details
+        
+    course_url = f"https://db.netkeiba.com/course/{venue_code}/"
+    soup = get_soup(course_url)
+    
+    if soup:
+        # Extract A2.1 Layout
+        layout_img = soup.find("img", class_=re.compile(r"course_map|course_img"))
+        if layout_img and "src" in layout_img.attrs:
+            course_details["layout_image_url"] = layout_img["src"]
+        
+        # Extract course info from course description
+        course_info_div = soup.find("div", class_=re.compile(r"course_info|course_data"))
+        if course_info_div:
+            course_text = clean_text(course_info_div.text)
+            straight_match = re.search(r"直線.*?(\d+)m", course_text)
+            if straight_match:
+                course_details["straight_length"] = straight_match.group(1)
+            
+            corner_match = re.search(r"コーナー.*?(急|緩|標準)", course_text)
+            if corner_match:
+                course_details["corner_shape"] = corner_match.group(1)
+            
+            elevation_match = re.search(r"高低差.*?(\d+)m", course_text)
+            if elevation_match:
+                course_details["elevation"] = elevation_match.group(1)
+        
+        # Extract A2.6/A2.7 Track Bias data
+        bias_table = soup.find("table", class_=re.compile(r"bias_table|race_table"))
+        if bias_table:
+            course_details["track_bias"] = []
+            rows = bias_table.find_all("tr")
+            for row in rows[1:]:  # Skip header
+                cells = row.find_all("td")
+                if len(cells) >= 3:
+                    bias_data = {
+                        "track_type": clean_text(cells[0].text),
+                        "distance": clean_text(cells[1].text),
+                        "bias_description": clean_text(cells[2].text)
+                    }
+                    course_details["track_bias"].append(bias_data)
+    else:
+        logger.warning(f"Could not fetch course details page: {course_url}")
+        
+    return course_details

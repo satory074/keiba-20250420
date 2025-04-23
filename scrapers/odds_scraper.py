@@ -208,6 +208,10 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
                 EC.presence_of_element_located((By.ID, "odds_tanpuku_list"))
             )
             logger.debug("Initial odds page loaded (Tan/Fuku container found).")
+            
+            odds_timestamp_element = driver.find_element(By.CLASS_NAME, "RaceOdds_UpdateTime")
+            if odds_timestamp_element:
+                live_odds_data["odds_update_time"] = clean_text(odds_timestamp_element.text)
         except TimeoutException:
             logger.error(f"Timeout waiting for initial odds page elements on {odds_url}")
             return live_odds_data

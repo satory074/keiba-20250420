@@ -15,6 +15,37 @@ from betting_analyzer import analyze_race
 logger = get_logger(__name__)
 
 
+def generate_recommendations(race_id: str) -> List[Dict[str, Any]]:
+    """
+    Generate betting recommendations for a race.
+    
+    Args:
+        race_id: Race ID to generate recommendations for
+        
+    Returns:
+        List of betting recommendations
+    """
+    logger.info(f"Generating betting recommendations for race {race_id}")
+    
+    race_data_file = f"race_data_{race_id}.json"
+    
+    if not os.path.exists(race_data_file):
+        logger.error(f"Race data file not found: {race_data_file}")
+        return [{"bet_type": "error", "reason": f"Race data file not found: {race_data_file}"}]
+    
+    recommendations = analyze_race(race_data_file)
+    
+    output_file = f"betting_recommendation_{race_id}.json"
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(recommendations, f, ensure_ascii=False, indent=2)
+        logger.info(f"Recommendations saved to {output_file}")
+    except Exception as e:
+        logger.error(f"Error saving recommendations to file: {e}")
+    
+    return recommendations
+
+
 def format_recommendation(recommendation: Dict[str, Any]) -> str:
     """
     Format a betting recommendation for display.

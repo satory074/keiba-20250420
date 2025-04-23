@@ -1,0 +1,242 @@
+{
+  "race_id": "202505020211",
+  "race_name": "フローラS(G2)",
+  "date": "2025年5月2日",
+  "venue_name": "東京",
+  "course_type": "芝",
+  "direction": "左",
+  "distance_meters": "2000m",
+  "weather": "晴",
+  "track_condition": "良",
+  "race_class": "G2",
+  "age_condition": "3歳",
+  "sex_condition": "牝",
+  "weight_condition": "定量",
+  "head_count": 18,
+  "horses": [
+    {
+      "horse_id": "2022101001",
+      "umaban": "1",
+      "horse_name": "ヴァルキリーバース",
+      "sex": "牝",
+      "age": 3,
+      "burden_weight": "55.0",
+      "jockey": "ルメール",
+      "jockey_id": "05339",
+      "trainer": "藤原英昭",
+      "trainer_id": "01051",
+      "horse_weight": 456,
+      "horse_weight_diff": "+2",
+      "win_odds": "7.8",
+      "popularity": "3",
+      "recent_results": [
+        {"race_name": "アルテミスS(G3)", "date": "2024年10月28日", "place": "1", "jockey": "ルメール"},
+        {"race_name": "デイリー杯2歳S(G2)", "date": "2024年11月10日", "place": "2", "jockey": "ルメール"},
+        {"race_name": "チューリップ賞(G2)", "date": "2025年3月8日", "place": "3", "jockey": "ルメール"}
+      ],
+      "pedigree_data": {
+        "father": "ドゥラメンテ",
+        "mother": "ヴァルキュリア",
+        "mother_father": "キングカメハメハ"
+      },
+      "jockey_profile": {
+        "jockey_id": "05339",
+        "jockey_name": "ルメール",
+        "win_rate": "0.187",
+        "place_rate": "0.512"
+      },
+      "trainer_profile": {
+        "trainer_id": "01051",
+        "trainer_name": "藤原英昭",
+        "win_rate": "0.212",
+        "place_rate": "0.534"
+      }
+    },
+    {
+      "horse_id": "2022101002",
+      "umaban": "2",
+      "horse_name": "エストゥペンダ",
+      "sex": "牝",
+      "age": 3,
+      "burden_weight": "55.0",
+      "jockey": "三浦",
+      "jockey_id": "01102",
+      "trainer": "手塚貴久",
+      "trainer_id": "01110",
+      "horse_weight": 462,
+      "horse_weight_diff": "-4",
+      "win_odds": "5.4",
+      "popularity": "1",
+      "recent_results": [
+        {"race_name": "新馬戦", "date": "2024年7月20日", "place": "1", "jockey": "三浦"},
+        {"race_name": "アルテミスS(G3)", "date": "2024年10月28日", "place": "2", "jockey": "三浦"},
+        {"race_name": "フェアリーS(G3)", "date": "2025年1月14日", "place": "1", "jockey": "三浦"}
+      ],
+      "pedigree_data": {
+        "father": "キズナ",
+        "mother": "エストゥディアンテ",
+        "mother_father": "ディープインパクト"
+      },
+      "jockey_profile": {
+        "jockey_id": "01102",
+        "jockey_name": "三浦",
+        "win_rate": "0.102",
+        "place_rate": "0.312"
+      },
+      "trainer_profile": {
+        "trainer_id": "01110",
+        "trainer_name": "手塚貴久",
+        "win_rate": "0.156",
+        "place_rate": "0.423"
+      }
+    },
+    {
+      "horse_id": "2022101007",
+      "umaban": "7",
+      "horse_name": "ゴーシーファー",
+      "sex": "牝",
+      "age": 3,
+      "burden_weight": "55.0",
+      "jockey": "手塚",
+      "jockey_id": "01567",
+      "trainer": "国枝栄",
+      "trainer_id": "01012",
+      "horse_weight": 470,
+      "horse_weight_diff": "+6",
+      "win_odds": "5.8",
+      "popularity": "2",
+      "recent_results": [
+        {"race_name": "新馬戦", "date": "2024年8月11日", "place": "1", "jockey": "手塚"},
+        {"race_name": "紅葉S", "date": "2024年11月3日", "place": "1", "jockey": "手塚"},
+        {"race_name": "チューリップ賞(G2)", "date": "2025年3月8日", "place": "2", "jockey": "手塚"}
+      ],
+      "pedigree_data": {
+        "father": "ハーツクライ",
+        "mother": "ゴーカイ",
+        "mother_father": "ディープインパクト"
+      },
+      "jockey_profile": {
+        "jockey_id": "01567",
+        "jockey_name": "手塚",
+        "win_rate": "0.124",
+        "place_rate": "0.345"
+      },
+      "trainer_profile": {
+        "trainer_id": "01012",
+        "trainer_name": "国枝栄",
+        "win_rate": "0.178",
+        "place_rate": "0.467"
+      }
+    },
+    {
+      "horse_id": "2022101014",
+      "umaban": "14",
+      "horse_name": "ブラックルビー",
+      "sex": "牝",
+      "age": 3,
+      "burden_weight": "55.0",
+      "jockey": "田中博",
+      "jockey_id": "01345",
+      "trainer": "萩原清",
+      "trainer_id": "01078",
+      "horse_weight": 452,
+      "horse_weight_diff": "+4",
+      "win_odds": "8.5",
+      "popularity": "4",
+      "recent_results": [
+        {"race_name": "新馬戦", "date": "2024年9月15日", "place": "2", "jockey": "田中博"},
+        {"race_name": "アルテミスS(G3)", "date": "2024年10月28日", "place": "3", "jockey": "田中博"},
+        {"race_name": "フェアリーS(G3)", "date": "2025年1月14日", "place": "2", "jockey": "田中博"}
+      ],
+      "pedigree_data": {
+        "father": "ブラックタイド",
+        "mother": "ルビーティアラ",
+        "mother_father": "ディープインパクト"
+      },
+      "jockey_profile": {
+        "jockey_id": "01345",
+        "jockey_name": "田中博",
+        "win_rate": "0.098",
+        "place_rate": "0.287"
+      },
+      "trainer_profile": {
+        "trainer_id": "01078",
+        "trainer_name": "萩原清",
+        "win_rate": "0.112",
+        "place_rate": "0.345"
+      }
+    }
+  ],
+  "live_odds_data": {
+    "tan": {
+      "1": "7.8",
+      "2": "5.4",
+      "7": "5.8",
+      "14": "8.5"
+    },
+    "fuku": {
+      "1": "2.4",
+      "2": "1.8",
+      "7": "1.9",
+      "14": "2.6"
+    },
+    "umaren": {
+      "1-2": "12.5",
+      "1-7": "13.2",
+      "2-7": "10.8",
+      "1-14": "18.4",
+      "2-14": "15.6",
+      "7-14": "16.2"
+    },
+    "umatan": {
+      "2-1": "25.4",
+      "2-7": "22.6",
+      "7-2": "23.8",
+      "2-14": "32.5",
+      "7-1": "26.8",
+      "7-14": "34.2"
+    }
+  },
+  "speed_figures": {
+    "figures": {
+      "1": {
+        "speed_index": "102",
+        "last_3f": "34.2",
+        "position_metric": "差し",
+        "pace_rating": "標準"
+      },
+      "2": {
+        "speed_index": "104",
+        "last_3f": "33.8",
+        "position_metric": "先行",
+        "pace_rating": "標準"
+      },
+      "7": {
+        "speed_index": "103",
+        "last_3f": "33.9",
+        "position_metric": "先行",
+        "pace_rating": "標準"
+      },
+      "14": {
+        "speed_index": "101",
+        "last_3f": "34.0",
+        "position_metric": "差し",
+        "pace_rating": "標準"
+      }
+    }
+  },
+  "course_details": {
+    "venue_name": "東京",
+    "layout_image_url": "https://db.netkeiba.com/img/course/tokyo_turf.png",
+    "straight_length": "525",
+    "corner_shape": "緩",
+    "elevation": "2.0",
+    "track_bias": [
+      {
+        "track_type": "芝",
+        "distance": "2000m",
+        "bias_description": "内外差なし"
+      }
+    ]
+  }
+}

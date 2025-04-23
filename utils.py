@@ -6,34 +6,25 @@ import time
 
 import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 # Import logger and config
 from logger_config import get_logger
 from config import HEADERS, REQUEST_DELAY, SELENIUM_WAIT_TIME
+from headless_browser import initialize_driver_with_fallback, safe_get_with_retry
 
 # Get logger instance for this module
 logger = get_logger(__name__)
 
 
 def initialize_driver():
-    """Initializes a headless Chrome WebDriver."""
-    logger.info("Initializing WebDriver...")
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox") # Often needed in restricted environments
-        chrome_options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        logger.info("WebDriver initialized successfully.")
-        return driver
-    except Exception as e:
-        logger.error(f"Failed to initialize WebDriver: {e}", exc_info=True)
-        return None
+    """
+    Initializes a headless Chrome WebDriver with fallback mechanisms.
+    
+    This function uses the robust implementation from headless_browser.py
+    which provides multiple fallback strategies for WebDriver initialization.
+    """
+    logger.info("Initializing WebDriver with fallback mechanisms...")
+    return initialize_driver_with_fallback()
 
 
 def get_soup(url):

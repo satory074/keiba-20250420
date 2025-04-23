@@ -1,56 +1,100 @@
-# Horse Racing Prediction Program
+# 競馬予測プログラム
 
-This repository contains a horse racing prediction program that collects and analyzes data from netkeiba.com to identify value betting opportunities.
+このリポジトリには、netkeiba.comからデータを収集・分析し、価値のある馬券を特定する競馬予測プログラムが含まれています。
 
-## Information Gathering Component
+## 概要
 
-The information gathering component is responsible for collecting all the required data points from netkeiba.com as specified in `docs/searchlist.md`. It uses a combination of BeautifulSoup for static content and Selenium for dynamic content.
+このシステムは、競馬の投資収益率（ROI）110%を達成することを目指した包括的な競馬データ分析・馬券推奨システムです。ユーザーは日本の競馬ウェブサイトnetkeibaから収集された詳細なレースデータを活用して、市場オッズが実際の確率を上回る価値ある馬券を特定できます。
 
-### Dependencies
+## 実行手順
 
-- Python 3.x
-- requests
-- beautifulsoup4
-- selenium
-- webdriver-manager
-
-Install dependencies:
+### 依存関係のインストール
 
 ```bash
 pip install requests beautifulsoup4 selenium webdriver-manager
 ```
 
-### Usage
+### データ収集
 
 ```bash
-python main.py <race_id>
+python main.py <レースID>
 ```
 
-Example:
+例：
+```bash
+python main.py 202505020211
+```
+
+これにより、指定されたレースのデータが収集され、`race_data_<レースID>.json`に保存されます。
+
+### 馬券推奨の確認
+
+データ収集後、システムは自動的に馬券推奨を生成します。推奨内容は`betting_recommendation_<レースID>.json`に保存されます。
+
+推奨内容の例：
+```json
+[
+  {
+    "bet_type": "tan",
+    "horse": "7",
+    "horse_name": "ゴーシーファー",
+    "odds": 5.8,
+    "amount": 1000,
+    "expected_value": 1.25,
+    "probability": 0.251,
+    "reason": "オッズと推定確率の差が大きく、期待値が高い"
+  }
+]
+```
+
+または、賭けない推奨の場合：
+```json
+[
+  {
+    "bet_type": "no_bet",
+    "reason": "期待値が閾値を超える価値ある馬券が見つかりませんでした",
+    "threshold": 1.1
+  }
+]
+```
+
+## システムアーキテクチャ
+
+システムは以下のコンポーネントで構成されています：
+
+1. **情報収集コンポーネント**：netkeibaからデータを収集します
+2. **データ処理**：収集したデータの検証と変換
+3. **確率推定**：勝率を推定する高度なモデル
+4. **馬券分析**：期待値計算と馬券種類の選択
+5. **推奨生成**：分析に基づく最終的な馬券推奨
+
+### データカテゴリ
+
+システムは以下のカテゴリのデータを収集します：
+
+- **A. レース条件**：基本的なレース情報、コース特性、天候、馬場状態
+- **B. 馬の詳細**：基本属性、過去の成績、血統、調教情報、馬の状態
+- **C. 人的要素**：騎手とトレーナーの情報
+- **D. 市場情報**：オッズと払戻金
+
+## フォールバックメカニズム
+
+システムには信頼性の高い運用を確保するための複数のフォールバックメカニズムが含まれています：
+
+1. **キャッシュデータ**：利用可能な場合は以前に収集したデータを使用
+2. **テストデータ**：ライブスクレイピングが失敗した場合はテストデータにフォールバック
+3. **ヘッドレスブラウザ**：WebDriverの初期化に複数の戦略を使用
+
+## Seleniumなしでのテスト
+
+Seleniumまたは環境でのChromeに問題がある場合は、`test_non_selenium.py`スクリプトを使用してSeleniumに依存しない部分をテストできます：
 
 ```bash
-python main.py 202306050811
+python test_non_selenium.py <レースID>
 ```
 
-### Testing Without Selenium
+このスクリプトはSeleniumに依存する部分（パドック情報、スピード指数、レースのお知らせ、ライブオッズ）をスキップしますが、基本的なレース情報、馬の詳細、騎手プロフィール、調教師プロフィール、血統データは収集します。
 
-If you encounter issues with Selenium or Chrome in your environment, you can use the `test_non_selenium.py` script to test the non-Selenium parts of the implementation:
+## データ検証
 
-```bash
-python test_non_selenium.py <race_id>
-```
-
-This script will skip the Selenium-dependent parts (paddock information, speed figures, race announcements, and live odds) but will still collect basic race information, horse details, jockey profiles, trainer profiles, and pedigree data.
-
-## Data Categories
-
-The system collects data across several categories:
-
-- **A. Race Conditions**: Basic race info, course characteristics, weather, track conditions
-- **B. Horse Details**: Basic attributes, past results, pedigree, training info, condition
-- **C. Human Factors**: Jockey and trainer information
-- **D. Market Information**: Odds and payouts
-
-## Validation
-
-The system includes a validation component that ensures all required data points are collected. The validation report is saved as `validation_report_<race_id>.json`.
+システムには、必要なすべてのデータポイントが収集されていることを確認する検証コンポーネントが含まれています。検証レポートは`validation_report_<レースID>.json`として保存されます。

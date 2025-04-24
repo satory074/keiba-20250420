@@ -19,6 +19,16 @@ logger = get_logger(__name__)
 def scrape_horse_list(soup: BeautifulSoup):
     """Scrapes the list of horses and their IDs from the race page soup."""
     horses = []
+    
+    # Check if soup is None or not a BeautifulSoup object
+    if soup is None:
+        logger.error("Cannot scrape horse list: soup is None")
+        return horses
+    
+    if not isinstance(soup, BeautifulSoup):
+        logger.error(f"Cannot scrape horse list: soup is not a BeautifulSoup object, got {type(soup)}")
+        return horses
+        
     try:
         logger.debug("Searching for horse list table with multiple possible class names")
         race_table = None

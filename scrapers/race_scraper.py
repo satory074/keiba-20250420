@@ -787,8 +787,25 @@ def scrape_course_details(venue_name: str) -> Dict[str, Any]:
         logger.warning(f"Unknown venue name '{venue_name}', cannot determine venue code.")
         return course_details
         
-    course_url = f"https://db.netkeiba.com/course/{venue_code}/"
-    soup = get_soup(course_url)
+    course_urls = [
+        f"https://db.netkeiba.com/race/course/{venue_code}/",
+        f"https://race.netkeiba.com/course/course_info.html?racecourse={venue_code}",
+        f"https://db.netkeiba.com/race/racecourse/{venue_code}/"
+    ]
+    
+    soup = None
+    for url in course_urls:
+        logger.info(f"Trying course details URL: {url}")
+        soup = get_soup(url)
+        if soup and not "404 Not Found" in soup.text:
+            logger.info(f"Successfully fetched course details from: {url}")
+            break
+        else:
+            logger.warning(f"Failed to fetch course details from: {url}")
+    
+    if not soup:
+        logger.error(f"Could not fetch course details for venue '{venue_name}' using any URL format.")
+        return course_details
     
     if soup:
         # Extract A2.1 Layout
@@ -827,6 +844,6 @@ def scrape_course_details(venue_name: str) -> Dict[str, Any]:
                     }
                     course_details["track_bias"].append(bias_data)
     else:
-        logger.warning(f"Could not fetch course details page: {course_url}")
+        logger.warning("Could not fetch course details page for any of the attempted URLs")
         
     return course_details

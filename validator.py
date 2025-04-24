@@ -138,6 +138,45 @@ def validate_race_data(race_data: Dict[str, Any]) -> bool:
             if "trainer_profile" in missing_fields["C"]:
                 missing_fields["C"].remove("trainer_profile")
                 logger.info("未来レースのため、trainer_profileを必須項目から除外します")
+            
+            if "horses" in race_data and race_data["horses"]:
+                for horse in race_data["horses"]:
+                    if "sex" not in horse or not horse["sex"]:
+                        if race_data.get("sex_condition") == "牝":
+                            horse["sex"] = "牝"  # Female
+                        elif race_data.get("sex_condition") == "牡":
+                            horse["sex"] = "牡"  # Male
+                        else:
+                            horse["sex"] = "牡"  # Default to male
+                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト性別を設定: {horse['sex']}")
+                    
+                    if "age" not in horse or not horse["age"]:
+                        if race_data.get("age_condition") == "3歳":
+                            horse["age"] = "3"
+                        elif race_data.get("age_condition") == "2歳":
+                            horse["age"] = "2"
+                        else:
+                            horse["age"] = "4"  # Default to 4yo for open races
+                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト年齢を設定: {horse['age']}")
+                    
+                    if "burden_weight" not in horse or not horse["burden_weight"]:
+                        if horse.get("sex") == "牝":
+                            horse["burden_weight"] = "54.0"  # Standard weight for females
+                        else:
+                            horse["burden_weight"] = "56.0"  # Standard weight for males
+                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト斤量を設定: {horse['burden_weight']}")
+                
+                if "sex" in missing_fields["B"]:
+                    missing_fields["B"].remove("sex")
+                    logger.info("未来レースのため、デフォルト性別を設定しました")
+                
+                if "age" in missing_fields["B"]:
+                    missing_fields["B"].remove("age")
+                    logger.info("未来レースのため、デフォルト年齢を設定しました")
+                
+                if "burden_weight" in missing_fields["B"]:
+                    missing_fields["B"].remove("burden_weight")
+                    logger.info("未来レースのため、デフォルト斤量を設定しました")
     
     all_complete = all(len(missing) == 0 for missing in missing_fields.values())
     

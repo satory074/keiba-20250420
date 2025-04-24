@@ -20,44 +20,98 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
     
     if is_future_race:
         required_categories = {
-            "A": ["race_id", "race_name", "date", "venue_name", "course_type", "distance_meters"],
-            "B": ["horses"],  # Only require horse list, not detailed info
-            "C": [],  # Don't require jockey/trainer data for future races
-            "D": ["live_odds_data"],  # Only require basic odds data, not payouts
+            "A": [
+                "race_id", "race_name", "date", "venue_name", "race_number", 
+                "course_type", "distance_meters", "race_class", "age_condition", 
+                "sex_condition", "weight_condition", "head_count",
+                "course_details",
+                "weather_track_details"
+            ],
+            "B": ["horses"],  # Require horse list with basic info
+            "C": [],  # Jockey/trainer data might be limited for future races
+            "D": ["live_odds_data"],  # Require odds data for future races
         }
-        logger.info("未来レース用の検証基準を適用します（必須フィールドを削減）")
+        logger.info("未来レース用の検証基準を適用します（一部のフィールドのみ必須）")
     else:
         required_categories = {
-            "A": ["race_id", "race_name", "date", "venue_name", "course_type", "distance_meters", 
-                  "weather", "track_condition", "race_class", "age_condition", "sex_condition", 
-                  "weight_condition", "head_count", "course_details", "weather_track_details"],
+            "A": [
+                "race_id", "race_name", "date", "venue_name", "race_number", 
+                "course_type", "distance_meters", "race_class", "age_condition", 
+                "sex_condition", "weight_condition", "head_count",
+                "course_details",
+                "weather",
+                "track_condition",
+                "weather_track_details",
+                "lap_times", "pace_segments"
+            ],
             "B": ["horses"],
             "C": ["horses"],  # Jockey and trainer data is nested within horses
             "D": ["live_odds_data", "payouts"],
         }
     
-    missing_fields = {category: [] for category in ["A", "B", "C", "D"]}
+    missing_fields = {category: [] for category in ["A", "B", "C", "D", "E"]}
     
     for field in required_categories["A"]:
         if field not in race_data or race_data[field] is None:
             missing_fields["A"].append(field)
     
+    if "course_details" in race_data and race_data["course_details"]:
+        course_details = race_data["course_details"]
+        for field in ["straight_length", "corner_shape", "elevation", "track_bias"]:
+            if field not in course_details or course_details[field] is None:
+                missing_fields["A"].append(f"course_details.{field}")
+    
+    if "weather_track_details" in race_data and race_data["weather_track_details"]:
+        wt_details = race_data["weather_track_details"]
+        if "summary_text" not in wt_details or not wt_details["summary_text"]:
+            missing_fields["A"].append("weather_track_details.summary_text")
+        if "summary_text" in wt_details and wt_details["summary_text"]:
+            if "左" not in wt_details["summary_text"] and "右" not in wt_details["summary_text"]:
+                missing_fields["A"].append("course_direction")
+    
     if "horses" not in race_data or not race_data["horses"]:
         missing_fields["B"].append("horses")
-    elif not is_future_race:
+    else:
         for horse in race_data["horses"]:
-            for field in ["horse_id", "horse_name", "sex", "age", "burden_weight", 
-                         "pedigree_data", "training_data"]:
+            for field in ["umaban", "horse_name"]:
                 if field not in horse or horse[field] is None:
                     if field not in missing_fields["B"]:
                         missing_fields["B"].append(field)
+        
+        if not is_future_race:
+            for horse in race_data["horses"]:
+                for field in ["horse_id", "sex", "age", "burden_weight"]:
+                    if field not in horse or horse[field] is None:
+                        if field not in missing_fields["B"]:
+                            missing_fields["B"].append(field)
+                
+                if "past_5_races" not in horse or not horse["past_5_races"]:
+                    if "past_5_races" not in missing_fields["B"]:
+                        missing_fields["B"].append("past_5_races")
+                
+                if "pedigree_data" not in horse or not horse["pedigree_data"]:
+                    if "pedigree_data" not in missing_fields["B"]:
+                        missing_fields["B"].append("pedigree_data")
+                
+                if "training_data" not in horse or not horse["training_data"]:
+                    if "training_data" not in missing_fields["B"]:
+                        missing_fields["B"].append("training_data")
     
-    if "C" in required_categories and required_categories["C"] and "horses" in race_data and race_data["horses"]:
+    if "paddock_info" not in race_data or not race_data["paddock_info"] or not race_data["paddock_info"].get("paddock_observations"):
+        if not is_future_race:
+            missing_fields["B"].append("paddock_info")
+    
+    if "speed_figures" not in race_data or not race_data["speed_figures"] or not race_data["speed_figures"].get("figures"):
+        if not is_future_race:
+            missing_fields["B"].append("speed_figures")
+    
+    if "horses" in race_data and race_data["horses"] and not is_future_race:
         for horse in race_data["horses"]:
-            if "jockey_profile" not in horse or horse["jockey_profile"] is None:
+            if "jockey_profile" not in horse or not horse["jockey_profile"]:
                 if "jockey_profile" not in missing_fields["C"]:
                     missing_fields["C"].append("jockey_profile")
-            if "trainer_profile" not in horse or horse["trainer_profile"] is None:
+            
+            if "trainer_profile" not in horse or not horse["trainer_profile"]:
                 if "trainer_profile" not in missing_fields["C"]:
                     missing_fields["C"].append("trainer_profile")
     
@@ -65,13 +119,22 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
         if field not in race_data or race_data[field] is None:
             missing_fields["D"].append(field)
     
+    if "live_odds_data" in race_data and race_data["live_odds_data"]:
+        odds_data = race_data["live_odds_data"]
+        if "odds" not in odds_data or not odds_data["odds"]:
+            missing_fields["D"].append("live_odds_data.odds")
+        else:
+            for bet_type in ["tan_fuku", "umaren", "wide", "umatan", "sanrentan", "sanrenpuku"]:
+                if bet_type not in odds_data["odds"] or not odds_data["odds"][bet_type]:
+                    missing_fields["D"].append(f"live_odds_data.odds.{bet_type}")
+    
     required_complete = True
     for category, fields in required_categories.items():
         if category == "horses":
             continue  # Special case handled separately
         
         missing_required = [field for field in missing_fields[category] 
-                           if field in required_categories[category]]
+                           if any(req_field in field for req_field in required_categories[category])]
         if missing_required:
             required_complete = False
     

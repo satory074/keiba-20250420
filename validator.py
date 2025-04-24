@@ -2,13 +2,14 @@
 Validation functions to ensure all required data points are collected.
 """
 import json
-from typing import Dict, Any, List, Optional
+import os
+from typing import Dict, Any, List, Optional, Tuple
 from logger_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def validate_race_data(race_data: Dict[str, Any]) -> bool:
+def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[str]]]:
     """Validates that all required data points from searchlist.md are present in the race data."""
     logger.info("Validating race data for completeness...")
     
@@ -54,145 +55,25 @@ def validate_race_data(race_data: Dict[str, Any]) -> bool:
     is_future_race = False
     if race_data.get("race_id") and race_data.get("race_id").startswith("2025"):
         is_future_race = True
-        logger.info(f"未来のレース（{race_data.get('race_id')}）を検出しました。デフォルト値を適用します。")
-    
-    if is_future_race or (race_data.get("race_id") == "202505020211" and race_data.get("race_name") == "フローラＳ") or race_data.get("race_id") == "202505020101":
-        if "weather" in missing_fields["A"]:
-            race_data["weather"] = "晴"  # Default weather
-            missing_fields["A"].remove("weather")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルト天候を設定: 晴")
-        
-        if "track_condition" in missing_fields["A"]:
-            race_data["track_condition"] = "良"  # Default track condition
-            missing_fields["A"].remove("track_condition")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルトコンディションを設定: 良")
-        
-        if "race_class" in missing_fields["A"]:
-            race_name = race_data.get("race_name", "")
-            if "G1" in race_name or "GI" in race_name:
-                race_class = "G1"
-            elif "G2" in race_name or "GII" in race_name or "フローラ" in race_name:
-                race_class = "G2"
-            elif "G3" in race_name or "GIII" in race_name:
-                race_class = "G3"
-            else:
-                race_class = "OP"  # Default to Open class
-            
-            race_data["race_class"] = race_class
-            missing_fields["A"].remove("race_class")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルトクラスを設定: {race_class}")
-        
-        if "age_condition" in missing_fields["A"]:
-            if race_data.get("race_name") == "フローラＳ":
-                age_condition = "3歳"
-            else:
-                age_condition = "3上"  # Default to 3yo and up
-            
-            race_data["age_condition"] = age_condition
-            missing_fields["A"].remove("age_condition")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルト年齢条件を設定: {age_condition}")
-        
-        if "sex_condition" in missing_fields["A"]:
-            # For フローラS, it's fillies only
-            if race_data.get("race_name") == "フローラＳ":
-                sex_condition = "牝"
-            else:
-                sex_condition = "混合"  # Default to mixed
-            
-            race_data["sex_condition"] = sex_condition
-            missing_fields["A"].remove("sex_condition")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルト性別条件を設定: {sex_condition}")
-        
-        if "weight_condition" in missing_fields["A"]:
-            race_data["weight_condition"] = "馬齢"  # Weight for age
-            missing_fields["A"].remove("weight_condition")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルト斤量条件を設定: 馬齢")
-        
-        if "head_count" in missing_fields["A"]:
-            if "horses" in race_data and race_data["horses"]:
-                head_count = str(len(race_data["horses"]))
-            else:
-                head_count = "16"  # Default head count
-            
-            race_data["head_count"] = head_count
-            missing_fields["A"].remove("head_count")
-            logger.info(f"{race_data.get('race_name', '不明レース')}のデフォルト出走頭数を設定: {head_count}")
-        
-        if is_future_race:
-            if "horse_id" in missing_fields["B"]:
-                missing_fields["B"].remove("horse_id")
-                logger.info("未来レースのため、horse_idを必須項目から除外します")
-            
-            if "pedigree_data" in missing_fields["B"]:
-                missing_fields["B"].remove("pedigree_data")
-                logger.info("未来レースのため、pedigree_dataを必須項目から除外します")
-            
-            if "training_data" in missing_fields["B"]:
-                missing_fields["B"].remove("training_data")
-                logger.info("未来レースのため、training_dataを必須項目から除外します")
-            
-            if "jockey_profile" in missing_fields["C"]:
-                missing_fields["C"].remove("jockey_profile")
-                logger.info("未来レースのため、jockey_profileを必須項目から除外します")
-            
-            if "trainer_profile" in missing_fields["C"]:
-                missing_fields["C"].remove("trainer_profile")
-                logger.info("未来レースのため、trainer_profileを必須項目から除外します")
-            
-            if "horses" in race_data and race_data["horses"]:
-                for horse in race_data["horses"]:
-                    if "sex" not in horse or not horse["sex"]:
-                        if race_data.get("sex_condition") == "牝":
-                            horse["sex"] = "牝"  # Female
-                        elif race_data.get("sex_condition") == "牡":
-                            horse["sex"] = "牡"  # Male
-                        else:
-                            horse["sex"] = "牡"  # Default to male
-                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト性別を設定: {horse['sex']}")
-                    
-                    if "age" not in horse or not horse["age"]:
-                        if race_data.get("age_condition") == "3歳":
-                            horse["age"] = "3"
-                        elif race_data.get("age_condition") == "2歳":
-                            horse["age"] = "2"
-                        else:
-                            horse["age"] = "4"  # Default to 4yo for open races
-                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト年齢を設定: {horse['age']}")
-                    
-                    if "burden_weight" not in horse or not horse["burden_weight"]:
-                        if horse.get("sex") == "牝":
-                            horse["burden_weight"] = "54.0"  # Standard weight for females
-                        else:
-                            horse["burden_weight"] = "56.0"  # Standard weight for males
-                        logger.info(f"馬 {horse.get('horse_name', '不明')} のデフォルト斤量を設定: {horse['burden_weight']}")
-                
-                if "sex" in missing_fields["B"]:
-                    missing_fields["B"].remove("sex")
-                    logger.info("未来レースのため、デフォルト性別を設定しました")
-                
-                if "age" in missing_fields["B"]:
-                    missing_fields["B"].remove("age")
-                    logger.info("未来レースのため、デフォルト年齢を設定しました")
-                
-                if "burden_weight" in missing_fields["B"]:
-                    missing_fields["B"].remove("burden_weight")
-                    logger.info("未来レースのため、デフォルト斤量を設定しました")
+        logger.info(f"未来のレース（{race_data.get('race_id')}）を検出しました。")
     
     all_complete = all(len(missing) == 0 for missing in missing_fields.values())
     
     if all_complete:
         logger.info("検証成功！すべての必須データポイントが存在します。")
-        return True
     else:
         for category, fields in missing_fields.items():
             if fields:
                 logger.warning(f"カテゴリ {category} の不足フィールド: {', '.join(fields)}")
-        return False
+    
+    return all_complete, missing_fields
 
 
 def validate_and_save_race_data(race_data: Dict[str, Any], output_filename: str) -> bool:
     """Validates race data and saves it to a JSON file."""
-    is_valid = validate_race_data(race_data)
+    is_valid, missing_fields = validate_race_data(race_data)
+    
+    race_data["missing_data"] = missing_fields
     
     try:
         with open(output_filename, "w", encoding="utf-8") as f:
@@ -205,6 +86,7 @@ def validate_and_save_race_data(race_data: Dict[str, Any], output_filename: str)
             "timestamp": race_data.get("timestamp", None),
             "race_id": race_data.get("race_id", None),
             "race_name": race_data.get("race_name", None),
+            "missing_fields": missing_fields
         }
         
         report_filename = f"validation_report_{race_data.get('race_id', 'unknown')}.json"
@@ -212,7 +94,60 @@ def validate_and_save_race_data(race_data: Dict[str, Any], output_filename: str)
             json.dump(validation_report, f, ensure_ascii=False, indent=2)
         logger.info(f"Validation report saved to {report_filename}")
         
+        missing_data_report = generate_missing_data_report(race_data, missing_fields)
+        missing_data_filename = f"missing_data_{race_data.get('race_id', 'unknown')}.txt"
+        with open(missing_data_filename, "w", encoding="utf-8") as f:
+            f.write(missing_data_report)
+        logger.info(f"Missing data report saved to {missing_data_filename}")
+        
         return is_valid
     except Exception as e:
         logger.error(f"Error saving data: {e}", exc_info=True)
         return False
+
+
+def generate_missing_data_report(race_data: Dict[str, Any], missing_fields: Dict[str, List[str]]) -> str:
+    """Generates a detailed report of missing data."""
+    race_id = race_data.get("race_id", "不明")
+    race_name = race_data.get("race_name", "不明")
+    
+    report = f"# 取得できなかったデータ一覧 - レースID: {race_id}\n\n"
+    report += f"レース名: {race_name}\n"
+    report += f"実行日時: {race_data.get('timestamp', '不明')}\n\n"
+    
+    has_missing_data = False
+    
+    for category, fields in missing_fields.items():
+        if fields:
+            has_missing_data = True
+            if category == "A":
+                report += "## A. レース条件\n\n"
+            elif category == "B":
+                report += "## B. 馬情報\n\n"
+            elif category == "C":
+                report += "## C. 人的要素\n\n"
+            elif category == "D":
+                report += "## D. 市場情報\n\n"
+            
+            for field in fields:
+                report += f"- {field}\n"
+            report += "\n"
+    
+    if not has_missing_data:
+        report += "すべてのデータが正常に取得されました。不足データはありません。\n"
+    else:
+        report += "## 考えられる原因\n\n"
+        
+        if race_id.startswith("2025"):
+            report += "- 未来のレースのため、一部のデータがまだ公開されていない可能性があります。\n"
+        
+        report += "- ネットワーク接続の問題により、一部のデータの取得に失敗した可能性があります。\n"
+        report += "- Webサイトの構造が変更された可能性があります。\n"
+        report += "- タイムアウトにより、一部のデータの取得に失敗した可能性があります。\n\n"
+        
+        report += "## 推奨アクション\n\n"
+        report += "- 後日再度実行して、データが公開されているか確認してください。\n"
+        report += "- ネットワーク接続を確認してください。\n"
+        report += "- config.pyのSELENIUM_WAIT_TIMEを増やして再試行してください。\n"
+    
+    return report

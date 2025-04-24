@@ -60,7 +60,7 @@ def main(race_id):
                 current_time = datetime.now()
                 time_diff = current_time - cache_time
                 
-                if race_id == "202505020211" or time_diff.total_seconds() > 21600:  # 6時間 = 21600秒
+                if race_id in ["202505020211", "202505020101"] or time_diff.total_seconds() > 21600:  # 6時間 = 21600秒
                     logger.info(f"キャッシュデータが古いか、テスト対象レースIDのため（{time_diff.total_seconds()/3600:.1f}時間経過）、新しいデータを取得します")
                 else:
                     logger.info(f"キャッシュデータは最新です（{time_diff.total_seconds()/3600:.1f}時間前）")
@@ -133,10 +133,7 @@ def main(race_id):
                     if "trainer_id" in horse_data:
                         horse_entry["trainer_id"] = horse_data["trainer_id"]
                     
-                    if race_id == "202505020211":
-                        horse_entry["sex"] = "牝"  # Female
-                        horse_entry["age"] = "3"  # 3yo
-                        horse_entry["burden_weight"] = "54.0"  # Standard weight for G2 3yo fillies
+                    logger.info(f"馬番{umaban}の基本情報のみを使用します（デフォルト値なし）")
                     
                     horses_summary.append(horse_entry)
                 
@@ -303,6 +300,14 @@ def main(race_id):
         if validation_result:
             logger.info("データ検証成功！すべての必須フィールドが存在します。")
         else:
+            missing_data_filename = f"missing_data_{race_id}.txt"
+            if os.path.exists(missing_data_filename):
+                logger.info(f"取得できなかったデータの一覧を表示します：")
+                with open(missing_data_filename, "r", encoding="utf-8") as f:
+                    missing_data_report = f.read()
+                    print("\n" + "="*80)
+                    print(missing_data_report)
+                    print("="*80 + "\n")
             logger.warning("データ検証で不足フィールドが見つかりました。詳細は検証レポートを確認してください。")
         
         logger.info("馬券推奨を生成中...")

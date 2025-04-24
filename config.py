@@ -23,4 +23,4 @@ PADDOCK_URL = "https://race.netkeiba.com/race/paddock.html?race_id={}"
 RACE_NEWS_URL = "https://race.netkeiba.com/race/news.html?race_id={}"
 
 # Time in seconds to wait for dynamic content to load in Selenium
-SELENIUM_WAIT_TIME = 2
+SELENIUM_WAIT_TIME = 10

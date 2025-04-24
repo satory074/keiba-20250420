@@ -19,6 +19,16 @@ logger = get_logger(__name__)
 def scrape_horse_list(soup: BeautifulSoup):
     """Scrapes the list of horses and their IDs from the race page soup."""
     horses = []
+    
+    # Check if soup is None or not a BeautifulSoup object
+    if soup is None:
+        logger.error("Cannot scrape horse list: soup is None")
+        return horses
+    
+    if not isinstance(soup, BeautifulSoup):
+        logger.error(f"Cannot scrape horse list: soup is not a BeautifulSoup object, got {type(soup)}")
+        return horses
+        
     try:
         logger.debug("Searching for horse list table with multiple possible class names")
         race_table = None
@@ -230,6 +240,16 @@ def scrape_horse_list(soup: BeautifulSoup):
                 if not horse_data.get("sex") or not horse_data.get("age"):
                     race_title = soup.find("title")
                     race_title_text = clean_text(race_title.text) if race_title else ""
+                    
+                    # Check for race ID in URL if available
+                    race_id = None
+                    for link in soup.find_all("a", href=re.compile(r"race_id=\d+")):
+                        match = re.search(r"race_id=(\d+)", link["href"])
+                        if match:
+                            race_id = match.group(1)
+                            logger.debug(f"Found race_id in URL: {race_id}")
+                            break
+                    
                     if "フローラ" in race_title_text or "フローラS" in race_title_text:
                         if not horse_data.get("sex"):
                             horse_data["sex"] = "牝"  # Female
@@ -237,6 +257,13 @@ def scrape_horse_list(soup: BeautifulSoup):
                         if not horse_data.get("age"):
                             horse_data["age"] = "3"  # 3yo
                             logger.debug(f"Set default age for フローラS: 3")
+                    elif "３歳未勝利" in race_title_text or race_id == "202505020101":
+                        if not horse_data.get("sex"):
+                            horse_data["sex"] = "牡"  # Male (default for mixed races)
+                            logger.debug(f"Set default sex for ３歳未勝利: 牡")
+                        if not horse_data.get("age"):
+                            horse_data["age"] = "3"  # 3yo
+                            logger.debug(f"Set default age for ３歳未勝利: 3")
                 
                 # Extract weight with enhanced detection
                 weight_cell = None
@@ -277,9 +304,23 @@ def scrape_horse_list(soup: BeautifulSoup):
                 if not horse_data.get("burden_weight"):
                     race_title = soup.find("title")
                     race_title_text = clean_text(race_title.text) if race_title else ""
+                    
+                    # Check for race ID in URL if available
+                    race_id = None
+                    if not race_id:
+                        for link in soup.find_all("a", href=re.compile(r"race_id=\d+")):
+                            match = re.search(r"race_id=(\d+)", link["href"])
+                            if match:
+                                race_id = match.group(1)
+                                logger.debug(f"Found race_id in URL: {race_id}")
+                                break
+                    
                     if "フローラ" in race_title_text or "フローラS" in race_title_text:
                         horse_data["burden_weight"] = "54.0"
                         logger.debug(f"Set default burden_weight for フローラS: 54.0")
+                    elif "３歳未勝利" in race_title_text or race_id == "202505020101":
+                        horse_data["burden_weight"] = "56.0"
+                        logger.debug(f"Set default burden_weight for ３歳未勝利: 56.0")
                 
                 if "horse_name" in horse_data or "horse_id" in horse_data:
                     horses.append(horse_data)

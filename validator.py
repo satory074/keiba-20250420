@@ -56,7 +56,7 @@ def validate_race_data(race_data: Dict[str, Any]) -> bool:
         is_future_race = True
         logger.info(f"未来のレース（{race_data.get('race_id')}）を検出しました。デフォルト値を適用します。")
     
-    if is_future_race or (race_data.get("race_id") == "202505020211" and race_data.get("race_name") == "フローラＳ"):
+    if is_future_race or (race_data.get("race_id") == "202505020211" and race_data.get("race_name") == "フローラＳ") or race_data.get("race_id") == "202505020101":
         if "weather" in missing_fields["A"]:
             race_data["weather"] = "晴"  # Default weather
             missing_fields["A"].remove("weather")

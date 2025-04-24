@@ -325,6 +325,12 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
                                         fuku_odds = cell_text
                                 elif cell_text and horse_name is None and re.search(r'[ぁ-んァ-ンー一-龯]', cell_text):
                                     horse_name = cell_text
+                                elif cell_text and re.match(r'^[\d.]+$', cell_text) and tan_odds is None:
+                                    # Check if this is a popularity column by class or position
+                                    if "popularity" in cells[i].get("class", []) or i >= 4:
+                                        popularity = cell_text
+                                        if race_id.startswith("2025"):
+                                            tan_odds = f"人気: {cell_text}"
                         
                         if tan_odds is None and len(cells) > 2:
                             tan_odds_text = clean_text(cells[2].text)

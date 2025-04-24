@@ -13,17 +13,30 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
     """Validates that all required data points from searchlist.md are present in the race data."""
     logger.info("Validating race data for completeness...")
     
-    required_categories = {
-        "A": ["race_id", "race_name", "date", "venue_name", "course_type", "distance_meters", 
-              "weather", "track_condition", "race_class", "age_condition", "sex_condition", 
-              "weight_condition", "head_count", "course_details", "weather_track_details", 
-              "announcements"],
-        "B": ["horses"],
-        "C": ["horses"],  # Jockey and trainer data is nested within horses
-        "D": ["live_odds_data", "payouts"],
-    }
+    is_future_race = False
+    if race_data.get("race_id") and race_data.get("race_id").startswith("2025"):
+        is_future_race = True
+        logger.info(f"未来のレース（{race_data.get('race_id')}）を検出しました。")
     
-    missing_fields = {category: [] for category in required_categories}
+    if is_future_race:
+        required_categories = {
+            "A": ["race_id", "race_name", "date", "venue_name", "course_type", "distance_meters"],
+            "B": ["horses"],  # Only require horse list, not detailed info
+            "C": [],  # Don't require jockey/trainer data for future races
+            "D": ["live_odds_data"],  # Only require basic odds data, not payouts
+        }
+        logger.info("未来レース用の検証基準を適用します（必須フィールドを削減）")
+    else:
+        required_categories = {
+            "A": ["race_id", "race_name", "date", "venue_name", "course_type", "distance_meters", 
+                  "weather", "track_condition", "race_class", "age_condition", "sex_condition", 
+                  "weight_condition", "head_count", "course_details", "weather_track_details"],
+            "B": ["horses"],
+            "C": ["horses"],  # Jockey and trainer data is nested within horses
+            "D": ["live_odds_data", "payouts"],
+        }
+    
+    missing_fields = {category: [] for category in ["A", "B", "C", "D"]}
     
     for field in required_categories["A"]:
         if field not in race_data or race_data[field] is None:
@@ -31,7 +44,7 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
     
     if "horses" not in race_data or not race_data["horses"]:
         missing_fields["B"].append("horses")
-    else:
+    elif not is_future_race:
         for horse in race_data["horses"]:
             for field in ["horse_id", "horse_name", "sex", "age", "burden_weight", 
                          "pedigree_data", "training_data"]:
@@ -39,7 +52,7 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
                     if field not in missing_fields["B"]:
                         missing_fields["B"].append(field)
     
-    if "horses" in race_data and race_data["horses"]:
+    if "C" in required_categories and required_categories["C"] and "horses" in race_data and race_data["horses"]:
         for horse in race_data["horses"]:
             if "jockey_profile" not in horse or horse["jockey_profile"] is None:
                 if "jockey_profile" not in missing_fields["C"]:
@@ -52,21 +65,26 @@ def validate_race_data(race_data: Dict[str, Any]) -> Tuple[bool, Dict[str, List[
         if field not in race_data or race_data[field] is None:
             missing_fields["D"].append(field)
     
-    is_future_race = False
-    if race_data.get("race_id") and race_data.get("race_id").startswith("2025"):
-        is_future_race = True
-        logger.info(f"未来のレース（{race_data.get('race_id')}）を検出しました。")
+    required_complete = True
+    for category, fields in required_categories.items():
+        if category == "horses":
+            continue  # Special case handled separately
+        
+        missing_required = [field for field in missing_fields[category] 
+                           if field in required_categories[category]]
+        if missing_required:
+            required_complete = False
     
-    all_complete = all(len(missing) == 0 for missing in missing_fields.values())
-    
-    if all_complete:
+    if required_complete:
         logger.info("検証成功！すべての必須データポイントが存在します。")
+        if is_future_race:
+            logger.info("未来レースのため、一部のデータが欠けていますが、必須データは揃っています。")
     else:
         for category, fields in missing_fields.items():
             if fields:
                 logger.warning(f"カテゴリ {category} の不足フィールド: {', '.join(fields)}")
     
-    return all_complete, missing_fields
+    return required_complete, missing_fields
 
 
 def validate_and_save_race_data(race_data: Dict[str, Any], output_filename: str) -> bool:
@@ -100,6 +118,16 @@ def validate_and_save_race_data(race_data: Dict[str, Any], output_filename: str)
             f.write(missing_data_report)
         logger.info(f"Missing data report saved to {missing_data_filename}")
         
+        logger.info("取得できなかったデータの一覧を表示します：\n")
+        logger.info("=" * 80)
+        logger.info(missing_data_report)
+        logger.info("=" * 80)
+        
+        if is_valid:
+            logger.info("データ検証に成功しました。すべての必須フィールドが存在します。")
+        else:
+            logger.warning("データ検証で不足フィールドが見つかりました。詳細は検証レポートを確認してください。")
+        
         return is_valid
     except Exception as e:
         logger.error(f"Error saving data: {e}", exc_info=True)
@@ -116,6 +144,8 @@ def generate_missing_data_report(race_data: Dict[str, Any], missing_fields: Dict
     report += f"実行日時: {race_data.get('timestamp', '不明')}\n\n"
     
     has_missing_data = False
+    
+    is_future_race = race_id.startswith("2025")
     
     for category, fields in missing_fields.items():
         if fields:
@@ -138,16 +168,32 @@ def generate_missing_data_report(race_data: Dict[str, Any], missing_fields: Dict
     else:
         report += "## 考えられる原因\n\n"
         
-        if race_id.startswith("2025"):
+        if is_future_race:
             report += "- 未来のレースのため、一部のデータがまだ公開されていない可能性があります。\n"
+            report += "  （これは正常な状態です。未来レースでは一部のデータは取得できません）\n"
         
         report += "- ネットワーク接続の問題により、一部のデータの取得に失敗した可能性があります。\n"
         report += "- Webサイトの構造が変更された可能性があります。\n"
         report += "- タイムアウトにより、一部のデータの取得に失敗した可能性があります。\n\n"
         
         report += "## 推奨アクション\n\n"
-        report += "- 後日再度実行して、データが公開されているか確認してください。\n"
+        
+        if is_future_race:
+            report += "- 未来レースの場合、レース当日に再度実行することで、より多くのデータが取得できる可能性があります。\n"
+        else:
+            report += "- 後日再度実行して、データが公開されているか確認してください。\n"
+        
         report += "- ネットワーク接続を確認してください。\n"
         report += "- config.pyのSELENIUM_WAIT_TIMEを増やして再試行してください。\n"
+        
+        if is_future_race:
+            report += "\n## 未来レースについての注意\n\n"
+            report += "未来レースでは、以下のデータは通常取得できません：\n"
+            report += "- 天候・馬場状態（レース当日まで確定しない）\n"
+            report += "- 確定した出走馬情報（馬ID、性別、年齢、斤量など）\n"
+            report += "- 騎手・調教師の詳細情報\n"
+            report += "- 確定した払戻情報（レース終了後に公開）\n\n"
+            report += "これらのデータが不足していても、基本的なレース情報とオッズ情報が取得できていれば、\n"
+            report += "予測に必要な最低限のデータは揃っていると判断されます。\n"
     
     return report

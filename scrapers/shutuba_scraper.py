@@ -70,9 +70,23 @@ def scrape_shutuba_past(driver: WebDriver, race_id: str):
 
             umaban_str = "unknown" # Initialize umaban_str
             try:
-                umaban_str = clean_text(cells[1].text)
+                if cells[1].has_attr('data-sort-value'):
+                    umaban_str = cells[1]['data-sort-value']
+                    logger.debug(f"Extracted umaban from data-sort-value: {umaban_str}")
+                elif cells[0].has_attr('data-umaban'):
+                    umaban_str = cells[0]['data-umaban']
+                    logger.debug(f"Extracted umaban from data-umaban: {umaban_str}")
+                elif len(cells) > 0 and clean_text(cells[0].text).isdigit():
+                    umaban_str = clean_text(cells[0].text)
+                    logger.debug(f"Extracted umaban from first cell: {umaban_str}")
+                else:
+                    umaban_str = clean_text(cells[1].text)
+                    logger.debug(f"Extracted umaban from second cell text: {umaban_str}")
+                
+                umaban_str = re.sub(r'\D', '', umaban_str)  # Remove non-digits
+                
                 if not umaban_str or not umaban_str.isdigit():
-                    logger.warning(f"Could not parse umaban from cell: {cells[1]}")
+                    logger.warning(f"Could not parse umaban from cells: {[cell.text for cell in cells[:2]]}")
                     continue
                 umaban = int(umaban_str)
                 horse_past_data = {'past_5_races': []}

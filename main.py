@@ -6,6 +6,7 @@ import json
 import os
 import re
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 from config import BASE_URL_NETKEIBA
 from logger_config import get_logger
@@ -46,7 +47,15 @@ def main(race_id):
                 race_data = json.load(f)
             logger.info(f"キャッシュデータの読み込みに成功しました")
             
-            if "timestamp" in race_data:
+            data_incomplete = False
+            if "horses" not in race_data or not race_data["horses"]:
+                logger.warning("キャッシュデータに出走馬情報がありません。新しいデータを取得します。")
+                data_incomplete = True
+            elif "race_name" not in race_data or not race_data["race_name"]:
+                logger.warning("キャッシュデータにレース名がありません。新しいデータを取得します。")
+                data_incomplete = True
+            
+            if not data_incomplete and "timestamp" in race_data:
                 cache_time = datetime.fromisoformat(race_data["timestamp"])
                 current_time = datetime.now()
                 time_diff = current_time - cache_time
@@ -58,7 +67,8 @@ def main(race_id):
                     recommendations = generate_recommendations(race_id)
                     return
             else:
-                logger.info("キャッシュデータにタイムスタンプがないため、新しいデータを取得します")
+                if not data_incomplete:
+                    logger.info("キャッシュデータにタイムスタンプがないため、新しいデータを取得します")
         except Exception as e:
             logger.warning(f"キャッシュデータの読み込みエラー: {e}。新しいデータを取得します")
 
@@ -66,11 +76,27 @@ def main(race_id):
         driver = initialize_driver()  # Initialize WebDriver
         logger.info("WebDriverの初期化に成功しました")
 
-        race_db_url = f"{BASE_URL_NETKEIBA}/race/{race_id}"
-        logger.info(f"レース情報ページを取得中: {race_db_url}")
-        race_soup = get_soup(race_db_url)
+        race_shutuba_url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
+        logger.info(f"出馬表ページを取得中: {race_shutuba_url}")
+        
+        if driver:
+            try:
+                driver.get(race_shutuba_url)
+                race_soup = BeautifulSoup(driver.page_source, "html.parser")
+                logger.info("出馬表ページの取得に成功しました（Selenium使用）")
+            except Exception as e:
+                logger.warning(f"Seleniumでの出馬表ページ取得に失敗: {e}")
+                race_soup = get_soup(race_shutuba_url)
+        else:
+            race_soup = get_soup(race_shutuba_url)
+            
+        if not race_soup or "レース情報が見つかりませんでした" in race_soup.text:
+            race_db_url = f"{BASE_URL_NETKEIBA}/race/{race_id}"
+            logger.info(f"出馬表ページの取得に失敗したため、DBページを取得中: {race_db_url}")
+            race_soup = get_soup(race_db_url)
+            
         if not race_soup:
-            logger.error(f"レース情報ページの取得に失敗しました: {race_db_url}。終了します。")
+            logger.error(f"レース情報ページの取得に失敗しました。終了します。")
             return
 
         logger.info("レース基本情報を抽出中...")

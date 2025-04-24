@@ -202,18 +202,39 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
     try:
         logger.info(f"Fetching live odds page with Selenium: {odds_url}")
         driver.get(odds_url)
-        # Use WebDriverWait for initial page load check (e.g., wait for Tan/Fuku container)
+        # Use WebDriverWait for initial page load check with multiple possible selectors
         try:
-            WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
-                EC.presence_of_element_located((By.ID, "odds_tanpuku_list"))
-            )
-            logger.debug("Initial odds page loaded (Tan/Fuku container found).")
+            # Try multiple possible selectors for odds container
+            try:
+                WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                    EC.presence_of_element_located((By.ID, "odds_tanpuku_list"))
+                )
+                logger.debug("Initial odds page loaded (traditional odds_tanpuku_list found).")
+            except TimeoutException:
+                try:
+                    WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "Odds_Table"))
+                    )
+                    logger.debug("Initial odds page loaded (Odds_Table class found).")
+                except TimeoutException:
+                    WebDriverWait(driver, SELENIUM_WAIT_TIME).until(
+                        EC.presence_of_element_located((By.CLASS_NAME, "RaceOdds_HorseList"))
+                    )
+                    logger.debug("Initial odds page loaded (RaceOdds_HorseList class found).")
             
-            odds_timestamp_element = driver.find_element(By.CLASS_NAME, "RaceOdds_UpdateTime")
-            if odds_timestamp_element:
-                live_odds_data["odds_update_time"] = clean_text(odds_timestamp_element.text)
+            try:
+                odds_timestamp_element = driver.find_element(By.CLASS_NAME, "RaceOdds_UpdateTime")
+                if odds_timestamp_element:
+                    live_odds_data["odds_update_time"] = clean_text(odds_timestamp_element.text)
+            except NoSuchElementException:
+                try:
+                    odds_timestamp_element = driver.find_element(By.CLASS_NAME, "UpdateTime")
+                    if odds_timestamp_element:
+                        live_odds_data["odds_update_time"] = clean_text(odds_timestamp_element.text)
+                except NoSuchElementException:
+                    logger.warning("Could not find odds update timestamp element.")
         except TimeoutException:
-            logger.error(f"Timeout waiting for initial odds page elements on {odds_url}")
+            logger.error(f"Timeout waiting for any odds page elements on {odds_url}")
             return live_odds_data
 
         # --- Helper function to get soup after potential AJAX loads ---
@@ -222,38 +243,125 @@ def scrape_live_odds(driver: WebDriver, race_id: str): # Accept driver instance
 
         # --- Scrape Tan/Fuku (Initial View) ---
         soup = get_current_soup(driver)
-        odds_container = soup.find("div", id="odds_tanpuku_list") # Main container for Tan/Fuku
+        
+        # Try multiple possible containers for Tan/Fuku odds
+        odds_container = None
+        tan_fuku_table = None
+        
+        odds_container = soup.find("div", id="odds_tanpuku_list")
         if odds_container and isinstance(odds_container, Tag):
-            tanfuku_table = odds_container.find("table") # Usually the first table inside
-            if tanfuku_table and isinstance(tanfuku_table, Tag):
-                live_odds_data["odds"]["tan_fuku"] = []
-                rows = tanfuku_table.find_all("tr")
-                for row in rows[1:]: # Skip header
-                    cells = row.find_all("td")
-                    if len(cells) >= 5: # Umaban, Horse Name, Tan Odds, Fuku Odds (Min-Max), Popularity
-                        try:
-                            umaban = clean_text(cells[0].text)
-                            horse_name_tag = cells[1].find("span", class_="HorseName") # Find the specific span
-                            horse_name = clean_text(horse_name_tag.text) if horse_name_tag else None
-                            tan_odds = clean_text(cells[2].text)
-                            fuku_odds = clean_text(cells[3].text)
+            logger.debug("Found traditional odds_tanpuku_list container")
+            tan_fuku_table = odds_container.find("table")
+            
+        # Try 2025 format containers if traditional not found
+        if not tan_fuku_table:
+            odds_tables = soup.find_all("table", class_=re.compile(r"Odds_Table|RaceOdds_Table"))
+            for table in odds_tables:
+                header_row = table.find("tr", class_=re.compile(r"Header|Heading"))
+                if header_row:
+                    header_cells = header_row.find_all(["th", "td"])
+                    header_texts = [clean_text(cell.text) for cell in header_cells]
+                    # Check if this table has Win/Place odds
+                    if any(win_text in " ".join(header_texts) for win_text in ["単勝", "Win", "win"]):
+                        tan_fuku_table = table
+                        logger.debug(f"Found 2025 format Tan/Fuku table with headers: {header_texts}")
+                        break
+        
+        if not tan_fuku_table:
+            for table in soup.find_all("table"):
+                rows = table.find_all("tr")
+                if len(rows) > 1:  # At least one header row and one data row
+                    first_data_row = rows[1]
+                    cells = first_data_row.find_all(["td", "th"])
+                    # Check if this row has a horse number and potential odds
+                    if len(cells) >= 3 and re.match(r'^\d+$', clean_text(cells[0].text)):
+                        tan_fuku_table = table
+                        logger.debug("Found potential Tan/Fuku table by structure analysis")
+                        break
+        
+        if tan_fuku_table and isinstance(tan_fuku_table, Tag):
+            live_odds_data["odds"]["tan_fuku"] = []
+            rows = tan_fuku_table.find_all("tr")
+            
+            start_idx = 1 if len(rows) > 1 and rows[0].find("th") else 0
+            
+            for row in rows[start_idx:]:
+                cells = row.find_all(["td", "th"])
+                if len(cells) >= 3:  # Basic validation
+                    try:
+                        umaban_cell = cells[0]
+                        
+                        if umaban_cell.has_attr('data-sort-value'):
+                            umaban = umaban_cell['data-sort-value']
+                        else:
+                            umaban = clean_text(umaban_cell.text)
+                            
+                        if not umaban or not re.match(r'^\d+$', umaban):
+                            continue
+                        
+                        # Extract horse name - usually in second column or in a specific span
+                        horse_name = None
+                        if len(cells) > 1:
+                            horse_name_tag = cells[1].find("span", class_=re.compile(r"HorseName|Horse_Name"))
+                            if horse_name_tag:
+                                horse_name = clean_text(horse_name_tag.text)
+                            else:
+                                horse_name = clean_text(cells[1].text)
+                                
+                                if re.match(r'^[\d.]+$', horse_name):
+                                    horse_name = None
+                        
+                        tan_odds = None
+                        fuku_odds = None
+                        
+                        # Check if we have at least 3 columns
+                        if len(cells) > 2:
+                            for i in range(1, min(4, len(cells))):
+                                cell_text = clean_text(cells[i].text) if cells[i].text else ""
+                                if cell_text and (re.match(r'^[\d.]+$', cell_text) or re.match(r'^[\d.]+-[\d.]+$', cell_text)):
+                                    if tan_odds is None:
+                                        tan_odds = cell_text
+                                    elif fuku_odds is None:
+                                        fuku_odds = cell_text
+                                elif cell_text and horse_name is None and re.search(r'[ぁ-んァ-ンー一-龯]', cell_text):
+                                    horse_name = cell_text
+                        
+                        if tan_odds is None and len(cells) > 2:
+                            tan_odds_text = clean_text(cells[2].text)
+                            if tan_odds_text and tan_odds_text != "---":
+                                odds_match = re.search(r'([\d.]+)', tan_odds_text)
+                                if odds_match:
+                                    tan_odds = odds_match.group(1)
+                        
+                        if fuku_odds is None and len(cells) > 3:
+                            fuku_text = clean_text(cells[3].text)
+                            if fuku_text and fuku_text != "---":
+                                odds_match = re.search(r'([\d.]+-[\d.]+|[\d.]+)', fuku_text)
+                                if odds_match:
+                                    fuku_odds = odds_match.group(1)
+                        
+                        popularity = None
+                        if len(cells) > 4:
                             popularity = clean_text(cells[4].text)
-                            odds_entry = {
-                                "umaban": umaban,
-                                "horse_name": horse_name,
-                                "tan_odds": tan_odds, # 単勝 (Win)
-                                "fuku_odds": fuku_odds, # 複勝 (Place)
-                                "popularity": popularity # Current popularity based on win odds
-                            }
-                            live_odds_data["odds"]["tan_fuku"].append(odds_entry)
-                            # logger.debug(f"Added Tan/Fuku odds: {odds_entry}") # Reduce log verbosity
-                        except Exception as e:
-                            logger.warning(f"Error parsing Tan/Fuku row: {row}. Error: {e}")
-                logger.info(f"Successfully scraped Tan/Fuku odds ({len(live_odds_data['odds']['tan_fuku'])} entries).")
-            else:
-                logger.warning(f"Tan/Fuku odds table not found within 'odds_tanpuku_list' for race {race_id}")
+                        
+                        odds_entry = {
+                            "umaban": umaban,
+                            "horse_name": horse_name if horse_name and horse_name != "--" else None,
+                            "tan_odds": tan_odds,  # 単勝 (Win)
+                            "fuku_odds": fuku_odds,  # 複勝 (Place)
+                            "popularity": popularity  # Current popularity based on win odds
+                        }
+                        
+                        # Clean up None values
+                        odds_entry = {k: v for k, v in odds_entry.items() if v is not None}
+                        
+                        live_odds_data["odds"]["tan_fuku"].append(odds_entry)
+                    except Exception as e:
+                        logger.warning(f"Error parsing Tan/Fuku row: {e}", exc_info=True)
+            
+            logger.info(f"Successfully scraped Tan/Fuku odds ({len(live_odds_data['odds']['tan_fuku'])} entries).")
         else:
-            logger.warning(f"Odds container 'odds_tanpuku_list' not found for race {race_id}")
+            logger.warning(f"Could not find any Tan/Fuku odds table for race {race_id}")
 
         # --- Function to click tab and parse matrix/list odds ---
         # Updated to wait for content within the main form div to change/appear

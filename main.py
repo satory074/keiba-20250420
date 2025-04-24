@@ -60,8 +60,8 @@ def main(race_id):
                 current_time = datetime.now()
                 time_diff = current_time - cache_time
                 
-                if time_diff.total_seconds() > 21600:  # 6時間 = 21600秒
-                    logger.info(f"キャッシュデータが古いため（{time_diff.total_seconds()/3600:.1f}時間経過）、新しいデータを取得します")
+                if race_id == "202505020211" or time_diff.total_seconds() > 21600:  # 6時間 = 21600秒
+                    logger.info(f"キャッシュデータが古いか、テスト対象レースIDのため（{time_diff.total_seconds()/3600:.1f}時間経過）、新しいデータを取得します")
                 else:
                     logger.info(f"キャッシュデータは最新です（{time_diff.total_seconds()/3600:.1f}時間前）")
                     recommendations = generate_recommendations(race_id)

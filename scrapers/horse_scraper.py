@@ -238,32 +238,34 @@ def scrape_horse_list(soup: BeautifulSoup):
                         logger.debug(f"Extracted age: {horse_data['age']}")
                 
                 if not horse_data.get("sex") or not horse_data.get("age"):
-                    race_title = soup.find("title")
-                    race_title_text = clean_text(race_title.text) if race_title else ""
+                    # Try to extract from data-attribute if available
+                    for cell in cells:
+                        if cell.has_attr('data-sex') and not horse_data.get("sex"):
+                            horse_data["sex"] = cell['data-sex']
+                            logger.debug(f"Extracted sex from data-attribute: {horse_data['sex']}")
+                        if cell.has_attr('data-age') and not horse_data.get("age"):
+                            horse_data["age"] = cell['data-age']
+                            logger.debug(f"Extracted age from data-attribute: {horse_data['age']}")
+                        
+                        if cell.has_attr('data-umaban') and not horse_data.get("umaban"):
+                            horse_data["umaban"] = cell['data-umaban']
+                            logger.debug(f"Extracted umaban from data-attribute: {horse_data['umaban']}")
                     
-                    # Check for race ID in URL if available
-                    race_id = None
-                    for link in soup.find_all("a", href=re.compile(r"race_id=\d+")):
-                        match = re.search(r"race_id=(\d+)", link["href"])
-                        if match:
-                            race_id = match.group(1)
-                            logger.debug(f"Found race_id in URL: {race_id}")
-                            break
+                    sex_age_spans = row.find_all("span", class_=re.compile(r"Barei|Seximal|Barei_Txt"))
+                    for span in sex_age_spans:
+                        span_text = clean_text(span.text)
+                        sex_match = re.search(r'([牡牝セ])', span_text)
+                        age_match = re.search(r'(\d+)', span_text)
+                        
+                        if sex_match and not horse_data.get("sex"):
+                            horse_data["sex"] = sex_match.group(1)
+                            logger.debug(f"Extracted sex from span: {horse_data['sex']}")
+                        
+                        if age_match and not horse_data.get("age"):
+                            horse_data["age"] = age_match.group(1)
+                            logger.debug(f"Extracted age from span: {horse_data['age']}")
                     
-                    if "フローラ" in race_title_text or "フローラS" in race_title_text:
-                        if not horse_data.get("sex"):
-                            horse_data["sex"] = "牝"  # Female
-                            logger.debug(f"Set default sex for フローラS: 牝")
-                        if not horse_data.get("age"):
-                            horse_data["age"] = "3"  # 3yo
-                            logger.debug(f"Set default age for フローラS: 3")
-                    elif "３歳未勝利" in race_title_text or race_id == "202505020101":
-                        if not horse_data.get("sex"):
-                            horse_data["sex"] = "牡"  # Male (default for mixed races)
-                            logger.debug(f"Set default sex for ３歳未勝利: 牡")
-                        if not horse_data.get("age"):
-                            horse_data["age"] = "3"  # 3yo
-                            logger.debug(f"Set default age for ３歳未勝利: 3")
+                    logger.debug(f"Could not extract sex/age for horse {horse_data.get('horse_name', 'unknown')}")
                 
                 # Extract weight with enhanced detection
                 weight_cell = None
@@ -302,25 +304,23 @@ def scrape_horse_list(soup: BeautifulSoup):
                         logger.debug(f"Extracted burden_weight: {horse_data['burden_weight']}")
                 
                 if not horse_data.get("burden_weight"):
-                    race_title = soup.find("title")
-                    race_title_text = clean_text(race_title.text) if race_title else ""
+                    # Try to extract from data-attribute if available
+                    for cell in cells:
+                        if cell.has_attr('data-weight') and not horse_data.get("burden_weight"):
+                            horse_data["burden_weight"] = cell['data-weight']
+                            logger.debug(f"Extracted burden_weight from data-attribute: {horse_data['burden_weight']}")
                     
-                    # Check for race ID in URL if available
-                    race_id = None
-                    if not race_id:
-                        for link in soup.find_all("a", href=re.compile(r"race_id=\d+")):
-                            match = re.search(r"race_id=(\d+)", link["href"])
-                            if match:
-                                race_id = match.group(1)
-                                logger.debug(f"Found race_id in URL: {race_id}")
-                                break
+                    # Try to extract from additional class patterns
+                    weight_spans = row.find_all("span", class_=re.compile(r"Weight|Burden|Jockey_Weight"))
+                    for span in weight_spans:
+                        span_text = clean_text(span.text)
+                        weight_match = re.search(r'(\d+(\.\d+)?)', span_text)
+                        
+                        if weight_match and not horse_data.get("burden_weight"):
+                            horse_data["burden_weight"] = weight_match.group(1)
+                            logger.debug(f"Extracted burden_weight from span: {horse_data['burden_weight']}")
                     
-                    if "フローラ" in race_title_text or "フローラS" in race_title_text:
-                        horse_data["burden_weight"] = "54.0"
-                        logger.debug(f"Set default burden_weight for フローラS: 54.0")
-                    elif "３歳未勝利" in race_title_text or race_id == "202505020101":
-                        horse_data["burden_weight"] = "56.0"
-                        logger.debug(f"Set default burden_weight for ３歳未勝利: 56.0")
+                    logger.debug(f"Could not extract burden_weight for horse {horse_data.get('horse_name', 'unknown')}")
                 
                 if "horse_name" in horse_data or "horse_id" in horse_data:
                     horses.append(horse_data)

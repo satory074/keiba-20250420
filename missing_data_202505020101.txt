@@ -1,7 +1,7 @@
 # 取得できなかったデータ一覧 - レースID: 202505020101
 
 レース名: ３歳未勝利 出馬表
-実行日時: 2025-04-25T01:03:35.652452
+実行日時: 2025-04-25T01:44:35.705447
 
 ## A. レース条件
 
@@ -20,15 +20,6 @@
 - weather_track_details.humidity
 - weather_track_details.wind_direction
 - weather_track_details.wind_speed
-
-## B. 馬情報
-
-- horse_id
-- sex
-- age
-- burden_weight
-- pedigree_data
-- training_data
 
 ## C. 人的要素
 

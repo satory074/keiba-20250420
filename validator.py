@@ -143,11 +143,75 @@ def generate_missing_data_report(race_data: Dict[str, Any], missing_fields: Dict
     report += f"レース名: {race_name}\n"
     report += f"実行日時: {race_data.get('timestamp', '不明')}\n\n"
     
+    all_possible_fields = {
+        "A": [
+            "race_id", "race_name", "date", "venue_name", "course_type", "distance_meters", 
+            "weather", "track_condition", "race_class", "age_condition", "sex_condition", 
+            "weight_condition", "head_count", 
+            "course_details.straight_length", "course_details.corner_shape", 
+            "course_details.elevation", "course_details.track_bias",
+            "weather_track_details.temperature", "weather_track_details.humidity",
+            "weather_track_details.wind_direction", "weather_track_details.wind_speed"
+        ],
+        "B": [
+            "horses", "horse_id", "horse_name", "sex", "age", "burden_weight", 
+            "pedigree_data", "training_data", "past_performance", "paddock_info"
+        ],
+        "C": [
+            "jockey_profile", "trainer_profile"
+        ],
+        "D": [
+            "live_odds_data", "payouts", 
+            "live_odds_data.odds.tan", "live_odds_data.odds.fuku",
+            "live_odds_data.odds.umaren", "live_odds_data.odds.wide",
+            "live_odds_data.odds.umatan", "live_odds_data.odds.sanrentan",
+            "live_odds_data.odds.sanrenpuku"
+        ]
+    }
+    
+    actual_missing_fields = {category: [] for category in ["A", "B", "C", "D"]}
+    
+    for field in all_possible_fields["A"]:
+        if "." in field:  # Nested field
+            parent, child = field.split(".")
+            if parent not in race_data or race_data[parent] is None or child not in race_data[parent]:
+                actual_missing_fields["A"].append(field)
+        elif field not in race_data or race_data[field] is None:
+            actual_missing_fields["A"].append(field)
+    
+    if "horses" not in race_data or not race_data["horses"]:
+        actual_missing_fields["B"].append("horses")
+    else:
+        for field in ["horse_id", "horse_name", "sex", "age", "burden_weight", "pedigree_data", "training_data"]:
+            for horse in race_data["horses"]:
+                if field not in horse or horse[field] is None:
+                    if field not in actual_missing_fields["B"]:
+                        actual_missing_fields["B"].append(field)
+    
+    if "horses" in race_data and race_data["horses"]:
+        for field in ["jockey_profile", "trainer_profile"]:
+            for horse in race_data["horses"]:
+                if field not in horse or horse[field] is None:
+                    if field not in actual_missing_fields["C"]:
+                        actual_missing_fields["C"].append(field)
+    
+    for field in all_possible_fields["D"]:
+        if "." in field:  # Nested field
+            parts = field.split(".")
+            current = race_data
+            missing = False
+            for part in parts:
+                if part not in current or current[part] is None:
+                    missing = True
+                    break
+                current = current[part]
+            if missing:
+                actual_missing_fields["D"].append(field)
+        elif field not in race_data or race_data[field] is None:
+            actual_missing_fields["D"].append(field)
+    
     has_missing_data = False
-    
-    is_future_race = race_id.startswith("2025")
-    
-    for category, fields in missing_fields.items():
+    for category, fields in actual_missing_fields.items():
         if fields:
             has_missing_data = True
             if category == "A":
@@ -162,6 +226,8 @@ def generate_missing_data_report(race_data: Dict[str, Any], missing_fields: Dict
             for field in fields:
                 report += f"- {field}\n"
             report += "\n"
+    
+    is_future_race = race_id.startswith("2025")
     
     if not has_missing_data:
         report += "すべてのデータが正常に取得されました。不足データはありません。\n"

@@ -1,6 +1,71 @@
 # 取得できなかったデータ一覧 - レースID: 202505020101
 
 レース名: ３歳未勝利 出馬表
-実行日時: 2025-04-24T16:00:24.456694
+実行日時: 2025-04-25T01:03:35.652452
 
-すべてのデータが正常に取得されました。不足データはありません。
+## A. レース条件
+
+- weather
+- track_condition
+- race_class
+- age_condition
+- sex_condition
+- weight_condition
+- head_count
+- course_details.straight_length
+- course_details.corner_shape
+- course_details.elevation
+- course_details.track_bias
+- weather_track_details.temperature
+- weather_track_details.humidity
+- weather_track_details.wind_direction
+- weather_track_details.wind_speed
+
+## B. 馬情報
+
+- horse_id
+- sex
+- age
+- burden_weight
+- pedigree_data
+- training_data
+
+## C. 人的要素
+
+- jockey_profile
+- trainer_profile
+
+## D. 市場情報
+
+- live_odds_data.odds.tan
+- live_odds_data.odds.fuku
+- live_odds_data.odds.umaren
+- live_odds_data.odds.wide
+- live_odds_data.odds.umatan
+- live_odds_data.odds.sanrentan
+- live_odds_data.odds.sanrenpuku
+
+## 考えられる原因
+
+- 未来のレースのため、一部のデータがまだ公開されていない可能性があります。
+  （これは正常な状態です。未来レースでは一部のデータは取得できません）
+- ネットワーク接続の問題により、一部のデータの取得に失敗した可能性があります。
+- Webサイトの構造が変更された可能性があります。
+- タイムアウトにより、一部のデータの取得に失敗した可能性があります。
+
+## 推奨アクション
+
+- 未来レースの場合、レース当日に再度実行することで、より多くのデータが取得できる可能性があります。
+- ネットワーク接続を確認してください。
+- config.pyのSELENIUM_WAIT_TIMEを増やして再試行してください。
+
+## 未来レースについての注意
+
+未来レースでは、以下のデータは通常取得できません：
+- 天候・馬場状態（レース当日まで確定しない）
+- 確定した出走馬情報（馬ID、性別、年齢、斤量など）
+- 騎手・調教師の詳細情報
+- 確定した払戻情報（レース終了後に公開）
+
+これらのデータが不足していても、基本的なレース情報とオッズ情報が取得できていれば、
+予測に必要な最低限のデータは揃っていると判断されます。
